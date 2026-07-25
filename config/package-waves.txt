@@ -1,0 +1,46 @@
+# wave|package
+# Wave 0 is produced by scripts/build-bootstraps.sh and is not duplicated here.
+
+1|git
+1|openssh
+1|curl
+1|wget
+1|python
+1|nodejs
+1|clang
+1|cmake
+1|make
+1|pkg-config
+1|ninja
+
+2|jq
+2|ripgrep
+2|tmux
+2|htop
+2|rsync
+2|ffmpeg
+2|zip
+2|unzip
+2|tree
+2|file
+2|which
+
+3|rust
+3|golang
+3|ruby
+3|php
+3|perl
+3|openjdk-17
+
+4|sqlite
+4|postgresql
+4|mariadb
+4|redis
+4|imagemagick
+4|libxml2
+4|libxslt
+4|openssl
+4|gnupg
+
+# Wave 5+ will be generated from the full repository after the first four waves
+# prove the prefix, package manager, toolchains and common dependency graph.
