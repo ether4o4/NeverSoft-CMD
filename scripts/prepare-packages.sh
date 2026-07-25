@@ -47,12 +47,12 @@ PY
 
 # Confirm the values the Termux build system derives from our fork identity.
 bash -lc "source '$PROPERTIES'; printf '%s\n' \
-  \"TERMUX__NAME=$TERMUX__NAME\" \
-  \"TERMUX_APP__PACKAGE_NAME=$TERMUX_APP__PACKAGE_NAME\" \
-  \"TERMUX_APP__DATA_DIR=$TERMUX_APP__DATA_DIR\" \
-  \"TERMUX__ROOTFS=$TERMUX__ROOTFS\" \
-  \"TERMUX__HOME=$TERMUX__HOME\" \
-  \"TERMUX__PREFIX=$TERMUX__PREFIX\""
+  \"TERMUX__NAME=\$TERMUX__NAME\" \
+  \"TERMUX_APP__PACKAGE_NAME=\$TERMUX_APP__PACKAGE_NAME\" \
+  \"TERMUX_APP__DATA_DIR=\$TERMUX_APP__DATA_DIR\" \
+  \"TERMUX__ROOTFS=\$TERMUX__ROOTFS\" \
+  \"TERMUX__HOME=\$TERMUX__HOME\" \
+  \"TERMUX__PREFIX=\$TERMUX__PREFIX\""
 
 # Hard fail if the derived prefix is not exactly the NeverSoft prefix.
 DERIVED_PREFIX="$(bash -lc "source '$PROPERTIES'; printf '%s' \"\$TERMUX__PREFIX\"")"
