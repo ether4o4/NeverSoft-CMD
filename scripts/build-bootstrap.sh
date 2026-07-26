@@ -14,7 +14,12 @@ ARTIFACT_DIR="$ROOT_DIR/artifacts/bootstrap"
 "$ROOT_DIR/scripts/prepare-packages.sh"
 mkdir -p "$ARTIFACT_DIR"
 
-args=(./scripts/build-bootstraps.sh -f --architectures "$ARCHITECTURES")
+# Do NOT pass -f here. The upstream build-bootstraps.sh force path can issue
+# destructive cleanup commands when legacy build-directory variables are empty
+# in newer termux-packages revisions. NeverSoft's prepare-packages.sh already
+# resets and cleans the package tree before each run, so a forced rebuild is
+# unnecessary for CI and normal clean builds.
+args=(./scripts/build-bootstraps.sh --architectures "$ARCHITECTURES")
 if [[ -n "$ADDITIONAL_PACKAGES" ]]; then
   args+=(--add "$ADDITIONAL_PACKAGES")
 fi
