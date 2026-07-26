@@ -22,19 +22,21 @@ fi
 
 PROPERTIES="$PKG_DIR/scripts/properties.sh"
 APT_BUILD="$PKG_DIR/packages/apt/build.sh"
+TERMUX_AM_BUILD="$PKG_DIR/packages/termux-am/build.sh"
 
-python3 - "$PROPERTIES" "$APT_BUILD" "$NEVERSOFT_PROJECT_NAME" "$NEVERSOFT_APP_ID" "$NEVERSOFT_APT_REPO_URL" "$NEVERSOFT_APT_SUITE" "$NEVERSOFT_APT_COMPONENT" <<'PY'
+python3 - "$PROPERTIES" "$APT_BUILD" "$TERMUX_AM_BUILD" "$NEVERSOFT_PROJECT_NAME" "$NEVERSOFT_APP_ID" "$NEVERSOFT_APT_REPO_URL" "$NEVERSOFT_APT_SUITE" "$NEVERSOFT_APT_COMPONENT" <<'PY'
 from pathlib import Path
 import re
 import sys
 
 properties = Path(sys.argv[1])
 apt_build = Path(sys.argv[2])
-project_name = sys.argv[3]
-app_id = sys.argv[4]
-repo_url = sys.argv[5]
-suite = sys.argv[6]
-component = sys.argv[7]
+termux_am_build = Path(sys.argv[3])
+project_name = sys.argv[4]
+app_id = sys.argv[5]
+repo_url = sys.argv[6]
+suite = sys.argv[7]
+component = sys.argv[8]
 
 text = properties.read_text()
 for key, value in {
@@ -61,6 +63,46 @@ text, count = pattern.subn(replacement, text, count=1)
 if count != 1:
     raise SystemExit("Could not replace stock Termux apt repository block")
 apt_build.write_text(text)
+
+# The package-builder image exposes an Android SDK that is readable but not
+# writable by the builder account. TermuxAm uses an older Android Gradle Plugin
+# which auto-installs compileSdk 33 and Build Tools 30.0.3. Redirect that one
+# package to a writable SDK copy so Gradle can install its missing components.
+text = termux_am_build.read_text()
+old = '''termux_step_post_get_source() {
+\tsed -i'' -E -e "s|\\@TERMUX_PREFIX\\@|${TERMUX_PREFIX}|g" "$TERMUX_PKG_SRCDIR/am-libexec-packaged"
+\tsed -i'' -E -e "s|\\@TERMUX_APP_PACKAGE\\@|${TERMUX_APP_PACKAGE}|g" "$TERMUX_PKG_SRCDIR/app/src/main/java/com/termux/termuxam/FakeContext.java"
+}'''
+new = '''termux_step_post_get_source() {
+\tsed -i'' -E -e "s|\\@TERMUX_PREFIX\\@|${TERMUX_PREFIX}|g" "$TERMUX_PKG_SRCDIR/am-libexec-packaged"
+\tsed -i'' -E -e "s|\\@TERMUX_APP_PACKAGE\\@|${TERMUX_APP_PACKAGE}|g" "$TERMUX_PKG_SRCDIR/app/src/main/java/com/termux/termuxam/FakeContext.java"
+\t# Keep the embedded helper APK aligned with the fork identity as well.
+\tsed -i'' -E -e "s|com\\.termux|${TERMUX_APP_PACKAGE}|g" "$TERMUX_PKG_SRCDIR/app/build.gradle"
+}'''
+if old not in text:
+    raise SystemExit("Could not locate termux-am post-get-source hook")
+text = text.replace(old, new, 1)
+
+needle = '''termux_step_make() {
+\t# Download and use a new enough gradle version to avoid the process hanging after running:'''
+replacement = '''termux_step_make() {
+\t# The package-builder SDK is read-only to the builder user. Gradle for
+\t# TermuxAm needs to add Android 33 + Build Tools 30.0.3, so make a writable
+\t# per-package SDK copy first. This is build-host plumbing only; it is not
+\t# shipped into the NeverSoft package.
+\tlocal readonly_android_home="$ANDROID_HOME"
+\tlocal writable_android_home="$TERMUX_PKG_TMPDIR/android-sdk"
+\trm -rf "$writable_android_home"
+\tcp -a "$readonly_android_home" "$writable_android_home"
+\tchmod -R u+rwX "$writable_android_home"
+\texport ANDROID_HOME="$writable_android_home"
+\texport ANDROID_SDK_ROOT="$writable_android_home"
+
+\t# Download and use a new enough gradle version to avoid the process hanging after running:'''
+if needle not in text:
+    raise SystemExit("Could not locate termux-am make hook")
+text = text.replace(needle, replacement, 1)
+termux_am_build.write_text(text)
 PY
 
 # Confirm the values the Termux build system derives from our fork identity.
@@ -86,6 +128,11 @@ fi
 
 if ! grep -Fq "$NEVERSOFT_APT_REPO_URL" "$APT_BUILD"; then
   echo "ERROR: NeverSoft apt repository was not injected" >&2
+  exit 1
+fi
+
+if ! grep -Fq 'writable_android_home' "$TERMUX_AM_BUILD"; then
+  echo "ERROR: termux-am writable Android SDK patch was not injected" >&2
   exit 1
 fi
 
