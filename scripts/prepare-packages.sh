@@ -141,8 +141,14 @@ if ! grep -Fq "$NEVERSOFT_APT_REPO_URL" "$APT_BUILD"; then
   echo "ERROR: NeverSoft apt repository was not injected" >&2
   exit 1
 fi
-if grep -Fq 'docbook-xsl' "$APT_BUILD"; then
+# Match the actual active build-dependency assignment, not comments mentioning
+# why docbook was removed.
+if grep -Eq '^TERMUX_PKG_BUILD_DEPENDS=.*docbook-xsl' "$APT_BUILD"; then
   echo "ERROR: apt docbook build dependency survived slim bootstrap patch" >&2
+  exit 1
+fi
+if ! grep -Fq 'TERMUX_PKG_BUILD_DEPENDS="libdb"' "$APT_BUILD"; then
+  echo "ERROR: apt slim build dependency set was not applied" >&2
   exit 1
 fi
 
