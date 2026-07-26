@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    android:orientation="vertical">
+
+    <!-- Phase 1 keeps this hidden. When AI lands, this becomes the TOP pane. -->
+    <FrameLayout
+        android:id="@+id/ai_pane"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#000000"
+        android:visibility="gone" />
+
+    <!-- Horizontal split handle; shown only when AI pane is enabled. -->
+    <View
+        android:id="@+id/split_handle"
+        android:layout_width="match_parent"
+        android:layout_height="4dp"
+        android:background="#303030"
+        android:visibility="gone" />
+
+    <!-- Terminal is the BOTTOM pane in split mode and fills the whole usable area in Phase 1. -->
+    <com.termux.view.TerminalView
+        android:id="@+id/terminal_view"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#000000"
+        android:focusable="true"
+        android:focusableInTouchMode="true" />
+
+    <TextView
+        android:id="@+id/status_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#000000"
+        android:gravity="center"
+        android:padding="12dp"
+        android:text="Preparing NeverSoft..."
+        android:textColor="#FFFFFF"
+        android:textSize="14sp" />
+
+</LinearLayout>
