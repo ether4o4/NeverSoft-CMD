@@ -120,15 +120,18 @@ optional_block = '''
 \t\tPACKAGES+=("patch")
 \t\tPACKAGES+=("unzip")
 '''
+# In this pinned termux-packages revision, curl is emitted as a subpackage of
+# the libcurl recipe. Requesting "curl" directly fails package discovery, while
+# building "libcurl" produces both the library package and the curl CLI .deb.
 if optional_block in text:
-    text = text.replace(optional_block, '\n\t\t# NeverSoft essentials beyond the base shell.\n\t\tPACKAGES+=("curl")\n', 1)
-elif 'PACKAGES+=("curl")' not in text:
+    text = text.replace(optional_block, '\n\t\t# NeverSoft essentials beyond the base shell.\n\t\tPACKAGES+=("libcurl")\n', 1)
+elif 'PACKAGES+=("libcurl")' not in text:
     raise SystemExit("Could not replace optional bootstrap package block")
 
-for forbidden in ('PACKAGES+=("bzip2")', 'PACKAGES+=("command-not-found")', 'PACKAGES+=("termux-tools")'):
+for forbidden in ('PACKAGES+=("bzip2")', 'PACKAGES+=("command-not-found")', 'PACKAGES+=("termux-tools")', 'PACKAGES+=("curl")'):
     if forbidden in text:
         raise SystemExit(f"Stale bootstrap entry survived: {forbidden}")
-for required in ('PACKAGES+=("apt")', 'PACKAGES+=("bash")', 'PACKAGES+=("coreutils")', 'PACKAGES+=("termux-core")', 'PACKAGES+=("termux-exec")', 'PACKAGES+=("curl")', 'PACKAGES+=("libbz2")'):
+for required in ('PACKAGES+=("apt")', 'PACKAGES+=("bash")', 'PACKAGES+=("coreutils")', 'PACKAGES+=("termux-core")', 'PACKAGES+=("termux-exec")', 'PACKAGES+=("libcurl")', 'PACKAGES+=("libbz2")'):
     if required not in text:
         raise SystemExit(f"Required NeverSoft bootstrap entry missing: {required}")
 bootstrap_build.write_text(text)
