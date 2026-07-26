@@ -1,9 +1,12 @@
 package com.neversoft.shell;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -21,6 +24,7 @@ import java.io.File;
 
 public final class MainActivity extends Activity implements TerminalSessionClient, TerminalViewClient {
     private static final String TAG = "NeverSoft";
+    private static final int REQUEST_STORAGE = 1001;
 
     private TerminalView terminalView;
     private TextView statusText;
@@ -42,11 +46,7 @@ public final class MainActivity extends Activity implements TerminalSessionClien
         BootstrapInstaller.ensureInstalled(this, new BootstrapInstaller.Callback() {
             @Override
             public void onReady() {
-                runOnUiThread(() -> {
-                    statusText.setVisibility(View.GONE);
-                    terminalView.setVisibility(View.VISIBLE);
-                    terminalView.post(MainActivity.this::startShell);
-                });
+                runOnUiThread(MainActivity.this::prepareStorageThenStartShell);
             }
 
             @Override
@@ -55,6 +55,53 @@ public final class MainActivity extends Activity implements TerminalSessionClien
                 runOnUiThread(() -> statusText.setText("NeverSoft bootstrap failed\n" + message));
             }
         });
+    }
+
+    /**
+     * Ask for classic shared-storage permission on the Phase-1 target SDK. The
+     * shell itself never depends on this permission: if the user declines, the
+     * private HOME/PREFIX remain fully operational and permission can be granted
+     * later from Android settings.
+     */
+    private void prepareStorageThenStartShell() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            statusText.setText("Allow file access for Downloads/Documents, or deny to use private storage only.");
+            requestPermissions(new String[] {
+                Manifest.permission.READ_EXTERNAL_STORAGE,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            }, REQUEST_STORAGE);
+            return;
+        }
+        setupStorageLinks();
+        revealAndStartShell();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_STORAGE) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                setupStorageLinks();
+            }
+            revealAndStartShell();
+        }
+    }
+
+    private void setupStorageLinks() {
+        try {
+            BootstrapInstaller.setupSharedStorage(this);
+        } catch (Throwable t) {
+            // Storage is optional for boot. Keep the shell usable even if Android
+            // denies/remaps shared storage on a particular OS build.
+            Log.w(TAG, "Shared storage setup unavailable", t);
+        }
+    }
+
+    private void revealAndStartShell() {
+        statusText.setVisibility(View.GONE);
+        terminalView.setVisibility(View.VISIBLE);
+        terminalView.post(this::startShell);
     }
 
     private void startShell() {
