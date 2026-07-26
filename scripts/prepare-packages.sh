@@ -68,6 +68,11 @@ apt_build.write_text(text)
 # writable by the builder account. TermuxAm uses an older Android Gradle Plugin
 # which auto-installs compileSdk 33 and Build Tools 30.0.3. Redirect that one
 # package to a writable SDK copy so Gradle can install its missing components.
+#
+# Do NOT rename TermuxAm's Java namespace. Its source package is
+# com.termux.termuxam and BuildConfig is generated in that namespace. Changing
+# the Gradle namespace alone breaks compilation. Instead, replace the fallback
+# BuildConfig reference in FakeContext with the fork's app package literal.
 text = termux_am_build.read_text()
 old = '''termux_step_post_get_source() {
 \tsed -i'' -E -e "s|\\@TERMUX_PREFIX\\@|${TERMUX_PREFIX}|g" "$TERMUX_PKG_SRCDIR/am-libexec-packaged"
@@ -75,9 +80,12 @@ old = '''termux_step_post_get_source() {
 }'''
 new = '''termux_step_post_get_source() {
 \tsed -i'' -E -e "s|\\@TERMUX_PREFIX\\@|${TERMUX_PREFIX}|g" "$TERMUX_PKG_SRCDIR/am-libexec-packaged"
-\tsed -i'' -E -e "s|\\@TERMUX_APP_PACKAGE\\@|${TERMUX_APP_PACKAGE}|g" "$TERMUX_PKG_SRCDIR/app/src/main/java/com/termux/termuxam/FakeContext.java"
-\t# Keep the embedded helper APK aligned with the fork identity as well.
-\tsed -i'' -E -e "s|com\\.termux|${TERMUX_APP_PACKAGE}|g" "$TERMUX_PKG_SRCDIR/app/build.gradle"
+\tlocal fake_context="$TERMUX_PKG_SRCDIR/app/src/main/java/com/termux/termuxam/FakeContext.java"
+\tsed -i'' -E -e "s|\\@TERMUX_APP_PACKAGE\\@|${TERMUX_APP_PACKAGE}|g" "$fake_context"
+\t# The placeholder above is the normal runtime path. Replace the legacy
+\t# BuildConfig fallback too so this helper remains fork-safe without moving
+\t# its internal Java namespace (which would break BuildConfig resolution).
+\tsed -i'' -E -e "s|BuildConfig\\.TERMUX_PACKAGE_NAME|\\\"${TERMUX_APP_PACKAGE}\\\"|g" "$fake_context"
 }'''
 if old not in text:
     raise SystemExit("Could not locate termux-am post-get-source hook")
@@ -133,6 +141,16 @@ fi
 
 if ! grep -Fq 'writable_android_home' "$TERMUX_AM_BUILD"; then
   echo "ERROR: termux-am writable Android SDK patch was not injected" >&2
+  exit 1
+fi
+
+if grep -Fq 's|com\\.termux|${TERMUX_APP_PACKAGE}|g' "$TERMUX_AM_BUILD"; then
+  echo "ERROR: broad termux-am namespace rewrite survived" >&2
+  exit 1
+fi
+
+if ! grep -Fq 'BuildConfig\\.TERMUX_PACKAGE_NAME' "$TERMUX_AM_BUILD"; then
+  echo "ERROR: termux-am BuildConfig fallback patch was not injected" >&2
   exit 1
 fi
 
