@@ -149,7 +149,8 @@ if grep -Fq 's|com\\.termux|${TERMUX_APP_PACKAGE}|g' "$TERMUX_AM_BUILD"; then
   exit 1
 fi
 
-if ! grep -Fq 'BuildConfig\\.TERMUX_PACKAGE_NAME' "$TERMUX_AM_BUILD"; then
+# The injected build.sh contains a single regex escape before the dot.
+if ! grep -Fq 'BuildConfig\.TERMUX_PACKAGE_NAME' "$TERMUX_AM_BUILD"; then
   echo "ERROR: termux-am BuildConfig fallback patch was not injected" >&2
   exit 1
 fi
