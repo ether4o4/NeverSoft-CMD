@@ -23,8 +23,9 @@ fi
 PROPERTIES="$PKG_DIR/scripts/properties.sh"
 APT_BUILD="$PKG_DIR/packages/apt/build.sh"
 TERMUX_AM_BUILD="$PKG_DIR/packages/termux-am/build.sh"
+BOOTSTRAP_BUILD="$PKG_DIR/scripts/build-bootstraps.sh"
 
-python3 - "$PROPERTIES" "$APT_BUILD" "$TERMUX_AM_BUILD" "$NEVERSOFT_PROJECT_NAME" "$NEVERSOFT_APP_ID" "$NEVERSOFT_APT_REPO_URL" "$NEVERSOFT_APT_SUITE" "$NEVERSOFT_APT_COMPONENT" <<'PY'
+python3 - "$PROPERTIES" "$APT_BUILD" "$TERMUX_AM_BUILD" "$BOOTSTRAP_BUILD" "$NEVERSOFT_PROJECT_NAME" "$NEVERSOFT_APP_ID" "$NEVERSOFT_APT_REPO_URL" "$NEVERSOFT_APT_SUITE" "$NEVERSOFT_APT_COMPONENT" <<'PY'
 from pathlib import Path
 import re
 import sys
@@ -32,11 +33,12 @@ import sys
 properties = Path(sys.argv[1])
 apt_build = Path(sys.argv[2])
 termux_am_build = Path(sys.argv[3])
-project_name = sys.argv[4]
-app_id = sys.argv[5]
-repo_url = sys.argv[6]
-suite = sys.argv[7]
-component = sys.argv[8]
+bootstrap_build = Path(sys.argv[4])
+project_name = sys.argv[5]
+app_id = sys.argv[6]
+repo_url = sys.argv[7]
+suite = sys.argv[8]
+component = sys.argv[9]
 
 text = properties.read_text()
 for key, value in {
@@ -111,6 +113,20 @@ if needle not in text:
     raise SystemExit("Could not locate termux-am make hook")
 text = text.replace(needle, replacement, 1)
 termux_am_build.write_text(text)
+
+# Current termux-packages names the package 'libbz2', but build-bootstraps.sh
+# still requests the historical package name 'bzip2'. The libbz2 package still
+# installs the bzip2/bzcat/bunzip2 binaries, so normalize the stale bootstrap
+# entry without changing runtime behavior.
+text = bootstrap_build.read_text()
+old_bootstrap = 'PACKAGES+=("bzip2")'
+new_bootstrap = 'PACKAGES+=("libbz2")'
+if old_bootstrap not in text:
+    if new_bootstrap not in text:
+        raise SystemExit("Could not locate bzip2/libbz2 bootstrap package entry")
+else:
+    text = text.replace(old_bootstrap, new_bootstrap, 1)
+bootstrap_build.write_text(text)
 PY
 
 # Confirm the values the Termux build system derives from our fork identity.
@@ -152,6 +168,16 @@ fi
 # The injected build.sh contains a single regex escape before the dot.
 if ! grep -Fq 'BuildConfig\.TERMUX_PACKAGE_NAME' "$TERMUX_AM_BUILD"; then
   echo "ERROR: termux-am BuildConfig fallback patch was not injected" >&2
+  exit 1
+fi
+
+if grep -Fq 'PACKAGES+=("bzip2")' "$BOOTSTRAP_BUILD"; then
+  echo "ERROR: stale bzip2 bootstrap package name survived" >&2
+  exit 1
+fi
+
+if ! grep -Fq 'PACKAGES+=("libbz2")' "$BOOTSTRAP_BUILD"; then
+  echo "ERROR: libbz2 bootstrap package replacement was not injected" >&2
   exit 1
 fi
 
