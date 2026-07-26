@@ -6,8 +6,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/config/neversoft.env"
 
 APP_DIR="${1:-${NEVERSOFT_WORK_DIR:-$ROOT_DIR/work}/termux-app}"
+MODULE="$APP_DIR/neversoft-app"
 
 [[ -d "$APP_DIR" ]] || { echo "ERROR: app source not found: $APP_DIR" >&2; exit 1; }
+[[ -d "$MODULE" ]] || { echo "ERROR: NeverSoft app module missing: $MODULE" >&2; exit 1; }
 
 fail=0
 
@@ -27,33 +29,34 @@ forbid_text() {
   fi
 }
 
-require_text "app/build.gradle" "applicationId \"$NEVERSOFT_APP_ID\""
-require_text "app/build.gradle" "manifestPlaceholders.TERMUX_PACKAGE_NAME = \"$NEVERSOFT_APP_ID\""
-require_text "app/build.gradle" "manifestPlaceholders.TERMUX_APP_NAME = \"$NEVERSOFT_APP_NAME\""
-require_text "app/build.gradle" "include 'arm64-v8a'"
-require_text "app/src/main/res/values/strings.xml" "<!ENTITY TERMUX_PACKAGE_NAME \"$NEVERSOFT_APP_ID\">"
-require_text "app/src/main/res/values/strings.xml" "<!ENTITY TERMUX_APP_NAME \"$NEVERSOFT_APP_NAME\">"
-require_text "termux-shared/src/main/java/com/termux/shared/termux/TermuxConstants.java" "TERMUX_PACKAGE_NAME = \"$NEVERSOFT_APP_ID\""
+require_text "settings.gradle" "':terminal-emulator'"
+require_text "settings.gradle" "':terminal-view'"
+require_text "settings.gradle" "':neversoft-app'"
+forbid_text "settings.gradle" "':app'"
+forbid_text "settings.gradle" "':termux-shared'"
 
-forbid_text "app/build.gradle" 'applicationId "com.termux"'
-forbid_text "app/src/main/res/xml/shortcuts.xml" 'android:targetPackage="com.termux"'
-forbid_text "termux-shared/src/main/java/com/termux/shared/termux/TermuxConstants.java" 'TERMUX_PACKAGE_NAME = "com.termux"'
+require_text "neversoft-app/build.gradle" "applicationId \"$NEVERSOFT_APP_ID\""
+require_text "neversoft-app/build.gradle" "abiFilters 'arm64-v8a'"
+require_text "neversoft-app/src/main/AndroidManifest.xml" "package=\"$NEVERSOFT_APP_ID\""
+require_text "neversoft-app/src/main/res/layout/activity_main.xml" "@+id/ai_pane"
+require_text "neversoft-app/src/main/res/layout/activity_main.xml" "@+id/split_handle"
+require_text "neversoft-app/src/main/res/layout/activity_main.xml" "@+id/terminal_view"
+require_text "neversoft-app/src/main/java/com/neversoft/shell/MainActivity.java" "new TerminalSession"
+require_text "neversoft-app/src/main/java/com/neversoft/shell/BootstrapInstaller.java" "SYMLINKS.txt"
+require_text "terminal-emulator/build.gradle" "abiFilters 'arm64-v8a'"
 
-# Java namespaces remain com.termux in Phase 1 intentionally. applicationId and
-# runtime paths are what must be independent. Report remaining literals so each
-# one can be classified before public distribution.
-echo
-echo "Remaining literal com.termux references (audit only):"
-grep -RIn --exclude-dir=.git --exclude='*.md' --exclude='*.txt' 'com\.termux' "$APP_DIR/app" "$APP_DIR/termux-shared" | head -n 120 || true
+if grep -RIn --exclude-dir=build '/data/data/com\.termux' "$MODULE"; then
+  echo "ERROR: NeverSoft-owned app module contains stock Termux runtime path" >&2
+  fail=1
+fi
 
-echo
-echo "Remaining literal /data/data/com.termux references:"
-if grep -RIn --exclude-dir=.git '/data/data/com\.termux' "$APP_DIR/app" "$APP_DIR/termux-shared"; then
-  echo "WARNING: classify the paths above before release. Runtime constants must not point at stock Termux." >&2
+if grep -RIn --exclude-dir=build 'applicationId[[:space:]]*\"com\.termux\"' "$MODULE"; then
+  echo "ERROR: NeverSoft-owned app module contains stock Termux applicationId" >&2
+  fail=1
 fi
 
 if (( fail != 0 )); then
   exit 1
 fi
 
-echo "NeverSoft app identity validation passed."
+echo "NeverSoft-owned app validation passed."
