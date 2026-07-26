@@ -16,12 +16,12 @@ ARTIFACT_DIR="$ROOT_DIR/artifacts/apk"
 mkdir -p "$ARTIFACT_DIR"
 
 pushd "$APP_DIR" >/dev/null
-TERMUX_SPLIT_APKS_FOR_DEBUG_BUILDS=1 ./gradlew --no-daemon :app:assembleDebug
+./gradlew --no-daemon :neversoft-app:assembleDebug
 popd >/dev/null
 
-mapfile -t apks < <(find "$APP_DIR/app/build/outputs/apk" -type f -name '*.apk' | sort)
+mapfile -t apks < <(find "$APP_DIR/neversoft-app/build/outputs/apk" -type f -name '*.apk' | sort)
 if (( ${#apks[@]} == 0 )); then
-  echo "ERROR: Gradle completed but no APK was found." >&2
+  echo "ERROR: Gradle completed but no NeverSoft APK was found." >&2
   exit 1
 fi
 
@@ -32,4 +32,4 @@ for apk in "${apks[@]}"; do
   sha256sum "$ARTIFACT_DIR/$name"
 done
 
-echo "NeverSoft APK artifact(s): $ARTIFACT_DIR"
+echo "NeverSoft-owned APK artifact(s): $ARTIFACT_DIR"
