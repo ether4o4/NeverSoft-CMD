@@ -2,6 +2,7 @@ package com.neversoft.shell;
 
 import android.content.Context;
 import android.os.Process;
+import android.system.ErrnoException;
 import android.system.Os;
 
 import java.io.BufferedReader;
@@ -25,6 +26,7 @@ final class BootstrapInstaller {
 
     private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor();
     private static final String SYMLINKS_FILE = "SYMLINKS.txt";
+    private static final String SHARED_STORAGE = "/storage/emulated/0";
 
     private BootstrapInstaller() {}
 
@@ -164,6 +166,39 @@ final class BootstrapInstaller {
         Os.chmod(pkg.getAbsolutePath(), 0700);
     }
 
+    /**
+     * Create Termux-style convenience links into Android shared storage. The app
+     * calls this after the runtime storage permission is granted. Existing real
+     * directories are never destroyed; only existing symlinks/files are replaced.
+     */
+    static void setupSharedStorage(Context context) throws Exception {
+        File home = new File(context.getFilesDir(), "home");
+        File storage = new File(home, "storage");
+        if (!storage.isDirectory() && !storage.mkdirs()) {
+            throw new IllegalStateException("Cannot create storage directory: " + storage);
+        }
+
+        String[][] links = new String[][] {
+            {"shared", SHARED_STORAGE},
+            {"downloads", SHARED_STORAGE + "/Download"},
+            {"documents", SHARED_STORAGE + "/Documents"},
+            {"dcim", SHARED_STORAGE + "/DCIM"},
+            {"pictures", SHARED_STORAGE + "/Pictures"},
+            {"movies", SHARED_STORAGE + "/Movies"},
+            {"music", SHARED_STORAGE + "/Music"}
+        };
+
+        for (String[] entry : links) {
+            File link = new File(storage, entry[0]);
+            try {
+                Os.unlink(link.getAbsolutePath());
+            } catch (ErrnoException ignored) {
+                if (link.exists() && link.isDirectory()) continue;
+            }
+            Os.symlink(entry[1], link.getAbsolutePath());
+        }
+    }
+
     private static int runSecondStage(Context context, File rootfs, File prefix, File home, File tmp, File script) throws Exception {
         ProcessBuilder pb = new ProcessBuilder(script.getAbsolutePath());
         pb.directory(rootfs);
@@ -188,6 +223,7 @@ final class BootstrapInstaller {
         pb.environment().put("TERM", "xterm-256color");
         pb.environment().put("COLORTERM", "truecolor");
         pb.environment().put("LANG", "en_US.UTF-8");
+        pb.environment().put("EXTERNAL_STORAGE", SHARED_STORAGE);
         pb.environment().put("LD_PRELOAD", prefixPath + "/lib/libtermux-exec.so");
         pb.environment().put("TERMUX__UID", Integer.toString(Process.myUid()));
         pb.environment().put("TERMUX__USER_ID", Integer.toString(Process.myUid()));
@@ -213,6 +249,7 @@ final class BootstrapInstaller {
             "TERM=xterm-256color",
             "COLORTERM=truecolor",
             "LANG=en_US.UTF-8",
+            "EXTERNAL_STORAGE=" + SHARED_STORAGE,
             "LD_PRELOAD=" + p + "/lib/libtermux-exec.so",
             "TERMUX__UID=" + Process.myUid(),
             "TERMUX__USER_ID=" + Process.myUid(),
