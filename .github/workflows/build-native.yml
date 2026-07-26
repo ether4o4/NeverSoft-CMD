@@ -1,0 +1,54 @@
+name: Build NeverSoft Native APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout migration branch
+        uses: actions/checkout@v4
+        with:
+          ref: native-prefix-migration
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 git curl zip unzip xz-utils zstd dpkg-dev
+
+      - name: Make build scripts executable
+        run: chmod +x scripts/*.sh
+
+      - name: Show Docker environment
+        run: |
+          docker --version
+          docker info
+
+      - name: Build custom bootstrap and APK
+        run: ./scripts/phase1-native-base.sh
+
+      - name: Upload NeverSoft APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeverSoft-native-arm64
+          path: artifacts/apk/*.apk
+          if-no-files-found: error
+
+      - name: Upload bootstrap and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeverSoft-build-artifacts
+          path: |
+            artifacts/bootstrap/**
+            artifacts/reports/**
+          if-no-files-found: warn
