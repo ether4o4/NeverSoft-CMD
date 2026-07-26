@@ -36,6 +36,7 @@ final class BootstrapInstaller {
                 File prefix = new File(rootfs, "usr");
                 File bash = new File(prefix, "bin/bash");
                 if (!bash.isFile()) install(app, rootfs, prefix);
+                installNeverSoftTools(prefix);
                 callback.onReady();
             } catch (Throwable t) {
                 callback.onError(t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage(), t);
@@ -129,6 +130,40 @@ final class BootstrapInstaller {
         }
     }
 
+    /**
+     * NeverSoft deliberately does not ship Termux's termux-tools/termux-am stack.
+     * This lightweight pkg command keeps the familiar workflow while routing
+     * directly to our native apt installation and our own repository.
+     */
+    private static void installNeverSoftTools(File prefix) throws Exception {
+        File bin = new File(prefix, "bin");
+        if (!bin.isDirectory() && !bin.mkdirs()) throw new IllegalStateException("Cannot create " + bin);
+        File pkg = new File(bin, "pkg");
+        String script = "#!" + new File(bin, "bash").getAbsolutePath() + "\n" +
+            "set -e\n" +
+            "cmd=${1:-help}\n" +
+            "if [ $# -gt 0 ]; then shift; fi\n" +
+            "case \"$cmd\" in\n" +
+            "  install|in) exec apt install \"$@\" ;;\n" +
+            "  remove|uninstall) exec apt remove \"$@\" ;;\n" +
+            "  reinstall) exec apt reinstall \"$@\" ;;\n" +
+            "  update|up) exec apt update \"$@\" ;;\n" +
+            "  upgrade) apt update && exec apt full-upgrade \"$@\" ;;\n" +
+            "  search) exec apt search \"$@\" ;;\n" +
+            "  show) exec apt show \"$@\" ;;\n" +
+            "  list-all|list) exec apt list \"$@\" ;;\n" +
+            "  clean) exec apt clean \"$@\" ;;\n" +
+            "  autoclean) exec apt autoclean \"$@\" ;;\n" +
+            "  help|-h|--help)\n" +
+            "    echo 'NeverSoft pkg: install remove reinstall update upgrade search show list-all clean autoclean' ;;\n" +
+            "  *) echo \"Unknown pkg command: $cmd\" >&2; exit 2 ;;\n" +
+            "esac\n";
+        try (FileOutputStream out = new FileOutputStream(pkg, false)) {
+            out.write(script.getBytes(StandardCharsets.UTF_8));
+        }
+        Os.chmod(pkg.getAbsolutePath(), 0700);
+    }
+
     private static int runSecondStage(Context context, File rootfs, File prefix, File home, File tmp, File script) throws Exception {
         ProcessBuilder pb = new ProcessBuilder(script.getAbsolutePath());
         pb.directory(rootfs);
@@ -155,6 +190,7 @@ final class BootstrapInstaller {
         pb.environment().put("LANG", "en_US.UTF-8");
         pb.environment().put("LD_PRELOAD", prefixPath + "/lib/libtermux-exec.so");
         pb.environment().put("TERMUX__UID", Integer.toString(Process.myUid()));
+        pb.environment().put("TERMUX__USER_ID", Integer.toString(Process.myUid()));
         pb.environment().put("TERMUX_APP__PACKAGE_NAME", context.getPackageName());
         pb.environment().put("TERMUX_APP__DATA_DIR", dataDir);
         pb.environment().put("TERMUX__ROOTFS", rootfs.getAbsolutePath());
@@ -179,6 +215,7 @@ final class BootstrapInstaller {
             "LANG=en_US.UTF-8",
             "LD_PRELOAD=" + p + "/lib/libtermux-exec.so",
             "TERMUX__UID=" + Process.myUid(),
+            "TERMUX__USER_ID=" + Process.myUid(),
             "TERMUX_APP__PACKAGE_NAME=" + context.getPackageName(),
             "TERMUX_APP__DATA_DIR=" + context.getApplicationInfo().dataDir,
             "TERMUX__ROOTFS=" + rootfs.getAbsolutePath(),
