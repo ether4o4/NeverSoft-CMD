@@ -26,21 +26,23 @@ printf 'termux-packages=%s\n' "$RESOLVED_SHA" > "$REPORT_DIR/upstream-refs.txt"
 
 PROPERTIES="$PKG_DIR/scripts/properties.sh"
 APT_BUILD="$PKG_DIR/packages/apt/build.sh"
+BASH_BUILD="$PKG_DIR/packages/bash/build.sh"
 BOOTSTRAP_BUILD="$PKG_DIR/scripts/build-bootstraps.sh"
 
-python3 - "$PROPERTIES" "$APT_BUILD" "$BOOTSTRAP_BUILD" "$NEVERSOFT_PROJECT_NAME" "$NEVERSOFT_APP_ID" "$NEVERSOFT_APT_REPO_URL" "$NEVERSOFT_APT_SUITE" "$NEVERSOFT_APT_COMPONENT" <<'PY'
+python3 - "$PROPERTIES" "$APT_BUILD" "$BASH_BUILD" "$BOOTSTRAP_BUILD" "$NEVERSOFT_PROJECT_NAME" "$NEVERSOFT_APP_ID" "$NEVERSOFT_APT_REPO_URL" "$NEVERSOFT_APT_SUITE" "$NEVERSOFT_APT_COMPONENT" <<'PY'
 from pathlib import Path
 import re
 import sys
 
 properties = Path(sys.argv[1])
 apt_build = Path(sys.argv[2])
-bootstrap_build = Path(sys.argv[3])
-project_name = sys.argv[4]
-app_id = sys.argv[5]
-repo_url = sys.argv[6]
-suite = sys.argv[7]
-component = sys.argv[8]
+bash_build = Path(sys.argv[3])
+bootstrap_build = Path(sys.argv[4])
+project_name = sys.argv[5]
+app_id = sys.argv[6]
+repo_url = sys.argv[7]
+suite = sys.argv[8]
+component = sys.argv[9]
 
 text = properties.read_text()
 for key, value in {
@@ -53,8 +55,9 @@ for key, value in {
         raise SystemExit(f"Expected exactly one assignment for {key}, found {count}")
 properties.write_text(text)
 
-# NeverSoft owns its repository. Stock Termux repositories are not valid for our
-# different native prefix and must never be emitted by the bootstrap apt package.
+# Never let the forked apt package ship stock Termux repositories. The first
+# personal repository is intentionally trusted=yes until NeverSoft's own
+# signing key/keyring is introduced.
 text = apt_build.read_text()
 pattern = re.compile(r'termux_step_post_make_install\(\) \{\s*\{\s*echo "# The main termux repository, with cloudflare cache".*?\}\s*> \$TERMUX_PREFIX/etc/apt/sources\.list', re.S)
 replacement = f'''termux_step_post_make_install() {{
@@ -80,6 +83,19 @@ if '-DWITH_DOC_MANPAGES=ON' in text:
 elif '-DWITH_DOC_MANPAGES=OFF' not in text:
     raise SystemExit("Could not disable apt manpage build")
 apt_build.write_text(text)
+
+# Upstream Bash depends on termux-tools as a Termux convenience/system bundle.
+# NeverSoft owns that layer itself. Keeping the dependency would pull in
+# termux-am + termux-am-socket and their helper APK/Gradle build even though
+# Bash does not require them to provide an interactive native shell.
+bash_text = bash_build.read_text()
+old_bash_deps = 'TERMUX_PKG_DEPENDS="libandroid-support, libiconv, readline (>= 8.3), termux-tools"'
+new_bash_deps = 'TERMUX_PKG_DEPENDS="libandroid-support, libiconv, readline (>= 8.3)"'
+if old_bash_deps in bash_text:
+    bash_text = bash_text.replace(old_bash_deps, new_bash_deps, 1)
+elif new_bash_deps not in bash_text:
+    raise SystemExit("Could not remove termux-tools from Bash dependencies")
+bash_build.write_text(bash_text)
 
 # Build a NeverSoft bootstrap, not a clone of Termux's convenience bundle.
 # Keep the native package manager + shell + core Unix tools. Everything else is
@@ -149,6 +165,14 @@ if grep -Eq '^TERMUX_PKG_BUILD_DEPENDS=.*docbook-xsl' "$APT_BUILD"; then
 fi
 if ! grep -Fq 'TERMUX_PKG_BUILD_DEPENDS="libdb"' "$APT_BUILD"; then
   echo "ERROR: apt slim build dependency set was not applied" >&2
+  exit 1
+fi
+if grep -Eq '^TERMUX_PKG_DEPENDS=.*termux-tools' "$BASH_BUILD"; then
+  echo "ERROR: Bash still depends on termux-tools" >&2
+  exit 1
+fi
+if ! grep -Fq 'TERMUX_PKG_DEPENDS="libandroid-support, libiconv, readline (>= 8.3)"' "$BASH_BUILD"; then
+  echo "ERROR: NeverSoft Bash dependency set was not applied" >&2
   exit 1
 fi
 
