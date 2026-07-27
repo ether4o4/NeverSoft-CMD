@@ -13,6 +13,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Executes AI-requested skills and shell commands under NeverSoft autonomy policy. */
 public final class AgentActionRuntime {
+    public static final class ShellResult {
+        public final int exitCode;
+        public final String output;
+        ShellResult(int exitCode, String output) {
+            this.exitCode = exitCode;
+            this.output = output;
+        }
+    }
+
     private final Activity activity;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final SkillRegistry skills;
@@ -53,19 +62,20 @@ public final class AgentActionRuntime {
         return skills.execute(call.id, call.args);
     }
 
-    public ShellRuntime.Result executeShell(String command) throws Exception {
+    public ShellResult executeShell(String command) throws Exception {
         CommandRisk.Result risk = CommandRisk.analyze(command);
         if (mode == AiConfig.AutonomyMode.READ_ONLY && (!isReadOnlyCommand(command) || risk.level != CommandRisk.Level.SAFE)) {
-            return new ShellRuntime.Result(126, "Blocked by read-only mode.");
+            return new ShellResult(126, "Blocked by read-only mode.");
         }
         // Full mode auto-runs safe/caution actions, but destructive operations still ask.
         boolean needsApproval = risk.level == CommandRisk.Level.DESTRUCTIVE ||
             (mode == AiConfig.AutonomyMode.SUPERVISED && risk.level == CommandRisk.Level.CAUTION);
         if (needsApproval) {
             String reason = risk.reasons.isEmpty() ? risk.level.toString() : join(risk.reasons);
-            if (!approve(command, reason)) return new ShellRuntime.Result(126, "Blocked by user.");
+            if (!approve(command, reason)) return new ShellResult(126, "Blocked by user.");
         }
-        return ShellRuntime.run(activity, command);
+        ShellRuntime.Result result = ShellRuntime.run(activity, command);
+        return new ShellResult(result.exitCode, result.output);
     }
 
     private boolean isReadOnlyCommand(String command) {
