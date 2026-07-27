@@ -97,13 +97,17 @@ public final class ShellRuntime {
         File h = home(context);
         File t = tmp(context);
         String prefix = p.getAbsolutePath();
+        String home = h.getAbsolutePath();
         env.clear();
-        env.put("HOME", h.getAbsolutePath());
+        env.put("HOME", home);
         env.put("PREFIX", prefix);
         env.put("TMPDIR", t.getAbsolutePath());
         env.put("TMP", t.getAbsolutePath());
         env.put("TEMP", t.getAbsolutePath());
-        env.put("PATH", prefix + "/bin:" + prefix + "/bin/applets:/system/bin:/system/xbin");
+        // Keep package binaries first, then user-installed Go/pip tools, then Android system tools.
+        env.put("PATH", prefix + "/bin:" + home + "/go/bin:" + home + "/.local/bin:" + prefix + "/bin/applets:/system/bin:/system/xbin");
+        env.put("GOBIN", home + "/go/bin");
+        env.put("GOPATH", home + "/go");
         env.put("SHELL", prefix + "/bin/bash");
         env.put("TERM", "xterm-256color");
         env.put("COLORTERM", "truecolor");
@@ -120,7 +124,7 @@ public final class ShellRuntime {
         env.put("GIT_EXEC_PATH", prefix + "/libexec/git-core");
         env.put("TERMUX_PREFIX", prefix);
         env.put("TERMUX__PREFIX", prefix);
-        env.put("TERMUX__HOME", h.getAbsolutePath());
+        env.put("TERMUX__HOME", home);
         env.put("TERMUX_APP__PACKAGE_NAME", context.getPackageName());
         env.put("TERMUX_APP__DATA_DIR", context.getApplicationInfo().dataDir);
     }
