@@ -65,6 +65,11 @@ public final class ShellRuntime {
     }
 
     public static Result run(Context context, String command) throws Exception {
+        return capture(processBuilder(context, command));
+    }
+
+    /** Build a long-lived process in the exact same HOME/PREFIX the terminal uses. */
+    public static ProcessBuilder processBuilder(Context context, String command) throws Exception {
         ensureCompatibility(context);
         File p = prefix(context);
         File h = home(context);
@@ -87,7 +92,7 @@ public final class ShellRuntime {
         pb.directory(h);
         pb.redirectErrorStream(true);
         applyEnvironment(pb.environment(), context);
-        return capture(pb);
+        return pb;
     }
 
     public static void ensurePackages(Context context, String... packages) throws Exception {
