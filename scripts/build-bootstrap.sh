@@ -2,31 +2,17 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck disable=SC1091
-source "$ROOT_DIR/config/neversoft.env"
-
-ARCHITECTURES="${1:-aarch64}"
-ADDITIONAL_PACKAGES="${NEVERSOFT_BOOTSTRAP_ADD:-}"
-WORK_DIR="${NEVERSOFT_WORK_DIR:-$ROOT_DIR/work}"
-PKG_DIR="$WORK_DIR/termux-packages"
 ARTIFACT_DIR="$ROOT_DIR/artifacts/bootstrap"
+ARCHITECTURES="${1:-aarch64}"
 
-"$ROOT_DIR/scripts/prepare-packages.sh"
+# Proven by OpenClawAndroid/AnyClaw's standalone Android integration. Pin the
+# exact bootstrap so NeverSoft builds are fast and reproducible instead of
+# rebuilding the full Termux package graph on every CI run.
+BOOTSTRAP_VERSION="bootstrap-2026.02.12-r1+apt.android-7"
+BASE_URL="https://github.com/termux/termux-packages/releases/download/${BOOTSTRAP_VERSION}"
+MIRROR_BASE="https://sourceforge.net/projects/termux-packages.mirror/files/${BOOTSTRAP_VERSION}"
+
 mkdir -p "$ARTIFACT_DIR"
-
-# Do NOT pass -f here. The upstream build-bootstraps.sh force path can issue
-# destructive cleanup commands when legacy build-directory variables are empty
-# in newer termux-packages revisions. NeverSoft's prepare-packages.sh already
-# resets and cleans the package tree before each run, so a forced rebuild is
-# unnecessary for CI and normal clean builds.
-args=(./scripts/build-bootstraps.sh --architectures "$ARCHITECTURES")
-if [[ -n "$ADDITIONAL_PACKAGES" ]]; then
-  args+=(--add "$ADDITIONAL_PACKAGES")
-fi
-
-pushd "$PKG_DIR" >/dev/null
-./scripts/run-docker.sh "${args[@]}"
-popd >/dev/null
 
 inject_neversoft_helpers() {
   local archive="$1"
@@ -38,20 +24,16 @@ inject_neversoft_helpers() {
   mkdir -p "$tmp/bin"
 
   cat > "$tmp/bin/ghget" <<'EOF'
-#!/data/data/com.neversoft.shell/files/usr/bin/bash
+#!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 
 usage() {
   cat <<'HELP'
 Usage: ghget OWNER/REPO [DESTINATION] [REF]
 
-Downloads a GitHub repository into the NeverSoft filesystem without requiring
-Git. If REF is omitted, GitHub's default branch is used. Set GITHUB_TOKEN for
-private repositories or higher API rate limits.
-
-Examples:
-  ghget ether4o4/shell-ai-scripts
-  ghget owner/repo ~/projects/repo main
+Downloads a GitHub repository into the NeverSoft filesystem. Full git is also
+installable through pkg; ghget exists so a fresh NeverSoft install can pull a
+repo immediately.
 HELP
 }
 
@@ -80,31 +62,23 @@ if [[ -n "${GITHUB_TOKEN:-}" ]]; then
   curl_args+=(-H "Authorization: Bearer $GITHUB_TOKEN")
 fi
 
-echo "Fetching $repo${ref:+ @ $ref} ..."
 curl "${curl_args[@]}" "$url" -o "$tmp"
 tar -xzf "$tmp" -C "$dest" --strip-components=1
 printf 'Ready: %s\n' "$dest"
 EOF
 
   cat > "$tmp/bin/github-install" <<'EOF'
-#!/data/data/com.neversoft.shell/files/usr/bin/bash
+#!/data/data/com.termux/files/usr/bin/bash
 exec ghget "$@"
 EOF
 
   cat > "$tmp/bin/storage-setup" <<'EOF'
-#!/data/data/com.neversoft.shell/files/usr/bin/bash
+#!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
-
 shared="${EXTERNAL_STORAGE:-/storage/emulated/0}"
 base="$HOME/storage"
 mkdir -p "$base"
-
-link() {
-  local name="$1" target="$2"
-  rm -f "$base/$name"
-  ln -s "$target" "$base/$name"
-}
-
+link() { rm -f "$base/$1"; ln -s "$2" "$base/$1"; }
 link shared "$shared"
 link downloads "$shared/Download"
 link documents "$shared/Documents"
@@ -112,38 +86,52 @@ link dcim "$shared/DCIM"
 link pictures "$shared/Pictures"
 link movies "$shared/Movies"
 link music "$shared/Music"
-
-echo "NeverSoft storage links:"
 ls -l "$base"
-if [[ ! -r "$shared" ]]; then
-  echo
-  echo "Shared storage is not readable yet. Grant Files/Storage permission to NeverSoft CMD and run storage-setup again." >&2
-fi
 EOF
 
-  chmod 0755 "$tmp/bin/ghget" "$tmp/bin/github-install" "$tmp/bin/storage-setup"
+  # Convenience launcher for a Hugging Face GGUF once llama-cpp is installed.
+  cat > "$tmp/bin/hf-serve" <<'EOF'
+#!/data/data/com.termux/files/usr/bin/bash
+set -euo pipefail
+model="${1:-}"
+port="${2:-8080}"
+[[ -n "$model" ]] || { echo "Usage: hf-serve MODEL.gguf [PORT]" >&2; exit 2; }
+[[ -f "$model" ]] || { echo "Model not found: $model" >&2; exit 1; }
+exec llama-server -m "$model" --host 127.0.0.1 --port "$port"
+EOF
 
-  # Recreate archive with NeverSoft helpers included. The upstream SYMLINKS.txt
-  # file remains untouched; BootstrapInstaller reconstructs those links on-device.
+  chmod 0755 "$tmp/bin/ghget" "$tmp/bin/github-install" "$tmp/bin/storage-setup" "$tmp/bin/hf-serve"
+
   (cd "$tmp" && zip -qr9 "$archive.new" .)
   mv -f "$archive.new" "$archive"
 
-  unzip -Z1 "$archive" | grep -Fxq 'bin/bash' || { echo "ERROR: bootstrap lost bin/bash" >&2; exit 1; }
-  unzip -Z1 "$archive" | grep -Fxq 'bin/curl' || { echo "ERROR: bootstrap does not contain curl" >&2; exit 1; }
-  unzip -Z1 "$archive" | grep -Fxq 'bin/ghget' || { echo "ERROR: bootstrap helper ghget missing" >&2; exit 1; }
-  unzip -Z1 "$archive" | grep -Fxq 'bin/storage-setup' || { echo "ERROR: bootstrap storage helper missing" >&2; exit 1; }
+  unzip -Z1 "$archive" | grep -Fxq 'bin/bash' || { echo "ERROR: bootstrap missing bin/bash" >&2; exit 1; }
+  unzip -Z1 "$archive" | grep -Fxq 'bin/apt' || { echo "ERROR: bootstrap missing apt" >&2; exit 1; }
+  unzip -Z1 "$archive" | grep -Fxq 'bin/ghget' || { echo "ERROR: ghget injection failed" >&2; exit 1; }
 }
 
 IFS=',' read -ra arches <<< "$ARCHITECTURES"
 for arch in "${arches[@]}"; do
-  src="$PKG_DIR/bootstrap-${arch}.zip"
-  if [[ ! -f "$src" ]]; then
-    echo "ERROR: expected bootstrap not generated: $src" >&2
+  arch="${arch// /}"
+  [[ -n "$arch" ]] || continue
+  out="$ARTIFACT_DIR/bootstrap-${arch}.zip"
+  url="$BASE_URL/bootstrap-${arch}.zip"
+  mirror="$MIRROR_BASE/bootstrap-${arch}.zip/download"
+
+  echo "Downloading pinned Termux bootstrap: $BOOTSTRAP_VERSION / $arch"
+  rm -f "$out" "$out.part"
+  if curl -fSL --retry 4 --retry-delay 2 -o "$out.part" "$url"; then
+    :
+  elif curl -fSL --retry 4 --retry-delay 2 -o "$out.part" "$mirror"; then
+    :
+  else
+    rm -f "$out.part"
+    echo "ERROR: failed to download bootstrap-$arch.zip" >&2
     exit 1
   fi
-  inject_neversoft_helpers "$src"
-  cp -f "$src" "$ARTIFACT_DIR/bootstrap-${arch}.zip"
-  sha256sum "$ARTIFACT_DIR/bootstrap-${arch}.zip"
+  mv "$out.part" "$out"
+  inject_neversoft_helpers "$out"
+  sha256sum "$out"
 done
 
-echo "NeverSoft bootstrap artifact(s): $ARTIFACT_DIR"
+echo "NeverSoft fast bootstrap artifact(s): $ARTIFACT_DIR"
