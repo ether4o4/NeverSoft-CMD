@@ -13,8 +13,10 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.FrameLayout;
 import android.widget.TextView;
 
+import com.neversoft.shell.ai.AiPaneController;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
 import com.termux.view.TerminalView;
@@ -27,8 +29,11 @@ public final class MainActivity extends Activity implements TerminalSessionClien
     private static final int REQUEST_STORAGE = 1001;
 
     private TerminalView terminalView;
+    private FrameLayout aiPane;
+    private View splitHandle;
     private TextView statusText;
     private TerminalSession session;
+    private AiPaneController aiController;
     private int terminalTextSize = 14;
 
     @Override
@@ -37,12 +42,14 @@ public final class MainActivity extends Activity implements TerminalSessionClien
         setContentView(R.layout.activity_main);
 
         terminalView = findViewById(R.id.terminal_view);
+        aiPane = findViewById(R.id.ai_pane);
+        splitHandle = findViewById(R.id.split_handle);
         statusText = findViewById(R.id.status_text);
         terminalView.setTerminalViewClient(this);
         terminalView.setTextSize(terminalTextSize);
         terminalView.setVisibility(View.INVISIBLE);
 
-        statusText.setText("Preparing NeverSoft native shell...");
+        statusText.setText("Preparing NeverSoft shell...");
         BootstrapInstaller.ensureInstalled(this, new BootstrapInstaller.Callback() {
             @Override
             public void onReady() {
@@ -57,12 +64,6 @@ public final class MainActivity extends Activity implements TerminalSessionClien
         });
     }
 
-    /**
-     * Ask for classic shared-storage permission on the Phase-1 target SDK. The
-     * shell itself never depends on this permission: if the user declines, the
-     * private HOME/PREFIX remain fully operational and permission can be granted
-     * later from Android settings.
-     */
     private void prepareStorageThenStartShell() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
             checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
@@ -81,9 +82,7 @@ public final class MainActivity extends Activity implements TerminalSessionClien
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQUEST_STORAGE) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                setupStorageLinks();
-            }
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) setupStorageLinks();
             revealAndStartShell();
         }
     }
@@ -92,8 +91,6 @@ public final class MainActivity extends Activity implements TerminalSessionClien
         try {
             BootstrapInstaller.setupSharedStorage(this);
         } catch (Throwable t) {
-            // Storage is optional for boot. Keep the shell usable even if Android
-            // denies/remaps shared storage on a particular OS build.
             Log.w(TAG, "Shared storage setup unavailable", t);
         }
     }
@@ -101,31 +98,29 @@ public final class MainActivity extends Activity implements TerminalSessionClien
     private void revealAndStartShell() {
         statusText.setVisibility(View.GONE);
         terminalView.setVisibility(View.VISIBLE);
+        if (aiController == null) aiController = new AiPaneController(this, aiPane, terminalView, splitHandle);
         terminalView.post(this::startShell);
     }
 
     private void startShell() {
         if (session != null && session.isRunning()) return;
 
-        File rootfs = getFilesDir();
-        File prefix = new File(rootfs, "usr");
-        File home = new File(rootfs, "home");
-        File bash = new File(prefix, "bin/bash");
+        File home = ShellRuntime.home(this);
+        File bash = new File(ShellRuntime.prefix(this), "bin/bash");
         if (!bash.isFile()) {
             statusText.setVisibility(View.VISIBLE);
-            statusText.setText("Native bash is missing from the NeverSoft prefix.");
+            statusText.setText("bash is missing from the NeverSoft prefix.");
             return;
         }
 
         home.mkdirs();
-        String shellPath = bash.getAbsolutePath();
-        String[] args = new String[] { shellPath, "-l" };
+        String executable = ShellRuntime.terminalExecutable(this);
+        String[] args = ShellRuntime.terminalArgs(this);
         String[] env = BootstrapInstaller.shellEnvironment(this);
-        session = new TerminalSession(shellPath, home.getAbsolutePath(), args, env, 5000, this);
+        session = new TerminalSession(executable, home.getAbsolutePath(), args, env, 5000, this);
         session.mSessionName = "NeverSoft_Shell";
         terminalView.attachSession(session);
         terminalView.requestFocus();
-        showKeyboard();
     }
 
     private void showKeyboard() {
@@ -136,11 +131,10 @@ public final class MainActivity extends Activity implements TerminalSessionClien
 
     @Override
     protected void onDestroy() {
+        if (aiController != null) aiController.destroy();
         if (isFinishing() && session != null) session.finishIfRunning();
         super.onDestroy();
     }
-
-    // TerminalSessionClient
 
     @Override
     public void onTextChanged(TerminalSession changedSession) {
@@ -148,9 +142,7 @@ public final class MainActivity extends Activity implements TerminalSessionClien
     }
 
     @Override
-    public void onTitleChanged(TerminalSession changedSession) {
-        // NeverSoft keeps its own shell chrome; escape-sequence titles do not replace the app identity.
-    }
+    public void onTitleChanged(TerminalSession changedSession) {}
 
     @Override
     public void onSessionFinished(TerminalSession finishedSession) {
@@ -183,8 +175,6 @@ public final class MainActivity extends Activity implements TerminalSessionClien
     @Override public void onColorsChanged(TerminalSession terminalSession) { runOnUiThread(terminalView::onScreenUpdated); }
     @Override public void onTerminalCursorStateChange(boolean state) { runOnUiThread(terminalView::onScreenUpdated); }
     @Override public Integer getTerminalCursorStyle() { return null; }
-
-    // TerminalViewClient
 
     @Override
     public float onScale(float scale) {
