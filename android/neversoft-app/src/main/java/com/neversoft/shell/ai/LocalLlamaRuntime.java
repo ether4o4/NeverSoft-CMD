@@ -40,6 +40,11 @@ public final class LocalLlamaRuntime {
         }
     }
 
+    /** Server readiness is authoritative even if this controller did not spawn the process. */
+    public boolean isReady() {
+        return healthCheck();
+    }
+
     public synchronized void ensureInstalled() throws Exception {
         File server = new File(ShellRuntime.prefix(context), "bin/llama-server");
         if (server.isFile()) return;
@@ -51,6 +56,12 @@ public final class LocalLlamaRuntime {
         if (model == null || !model.isFile() || model.length() == 0) {
             throw new IllegalArgumentException("GGUF model file is missing");
         }
+
+        // Activity recreation or a previous successful load can leave a perfectly healthy
+        // llama-server listening locally even though this Java instance has no Process handle.
+        // Adopt that server rather than trying to bind a second process to the same port.
+        if (healthCheck()) return;
+
         stop();
         ensureInstalled();
 
