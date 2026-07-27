@@ -24,7 +24,7 @@ inject_neversoft_helpers() {
   mkdir -p "$tmp/bin"
 
   cat > "$tmp/bin/ghget" <<'EOF'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/data/user/0/com.neversoft.shell/files/usr/bin/bash
 set -euo pipefail
 
 usage() {
@@ -68,12 +68,12 @@ printf 'Ready: %s\n' "$dest"
 EOF
 
   cat > "$tmp/bin/github-install" <<'EOF'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/data/user/0/com.neversoft.shell/files/usr/bin/bash
 exec ghget "$@"
 EOF
 
   cat > "$tmp/bin/storage-setup" <<'EOF'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/data/user/0/com.neversoft.shell/files/usr/bin/bash
 set -euo pipefail
 shared="${EXTERNAL_STORAGE:-/storage/emulated/0}"
 base="$HOME/storage"
@@ -89,9 +89,8 @@ link music "$shared/Music"
 ls -l "$base"
 EOF
 
-  # Convenience launcher for a Hugging Face GGUF once llama-cpp is installed.
   cat > "$tmp/bin/hf-serve" <<'EOF'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/data/user/0/com.neversoft.shell/files/usr/bin/bash
 set -euo pipefail
 model="${1:-}"
 port="${2:-8080}"
