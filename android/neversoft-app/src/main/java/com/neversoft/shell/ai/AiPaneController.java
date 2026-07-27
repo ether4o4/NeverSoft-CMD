@@ -1,7 +1,6 @@
 package com.neversoft.shell.ai;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Handler;
@@ -18,20 +17,16 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-import com.neversoft.shell.ShellRuntime;
-
 import org.json.JSONObject;
 
 import java.io.File;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Minimal Windows-11-inspired top AI pane backed by local Hugging Face GGUF. */
+/** Windows-11-inspired top AI pane backed by local Hugging Face GGUF. */
 public final class AiPaneController {
     private final Activity activity;
     private final FrameLayout aiPane;
@@ -42,6 +37,7 @@ public final class AiPaneController {
     private final LocalLlamaRuntime llama;
     private final AiConfig config = new AiConfig();
     private final List<JSONObject> history = new ArrayList<>();
+    private final NeverSoftAgentRuntime agentRuntime;
 
     private TextView transcript;
     private TextView status;
@@ -50,6 +46,7 @@ public final class AiPaneController {
     private EditText tokenInput;
     private Button sendButton;
     private Button loadButton;
+    private Button modeButton;
     private ScrollView transcriptScroll;
     private volatile boolean busy;
 
@@ -59,12 +56,14 @@ public final class AiPaneController {
         this.terminalPane = terminalPane;
         this.splitHandle = splitHandle;
         this.llama = new LocalLlamaRuntime(activity);
+        this.agentRuntime = new NeverSoftAgentRuntime(activity);
         buildUi();
         enableSplit();
     }
 
     public void destroy() {
         llama.stop();
+        agentRuntime.close();
         worker.shutdownNow();
     }
 
@@ -82,8 +81,12 @@ public final class AiPaneController {
         TextView title = text("NeverSoft AI", 14, Color.rgb(242, 242, 242));
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         status = text("HF LOCAL · model not loaded", 11, Color.rgb(160, 160, 160));
+        modeButton = button(agentRuntime.modeLabel());
         titleRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         titleRow.addView(status);
+        LinearLayout.LayoutParams modeLp = new LinearLayout.LayoutParams(dp(88), dp(32));
+        modeLp.setMargins(dp(7), 0, 0, 0);
+        titleRow.addView(modeButton, modeLp);
         root.addView(titleRow);
 
         LinearLayout setup = new LinearLayout(activity);
@@ -101,7 +104,7 @@ public final class AiPaneController {
         setup.addView(loadButton, loadLp);
         root.addView(setup);
 
-        transcript = text("Paste a Hugging Face GGUF URL above. NeverSoft will download it locally, install llama.cpp in the shell, and run the model on-device.\n", 12, Color.rgb(224, 224, 224));
+        transcript = text("Paste a Hugging Face GGUF URL above. NeverSoft skills live in ~/skills and are exposed to the local model.\n", 12, Color.rgb(224, 224, 224));
         transcript.setTypeface(Typeface.MONOSPACE);
         transcript.setTextIsSelectable(true);
         transcriptScroll = new ScrollView(activity);
@@ -123,6 +126,11 @@ public final class AiPaneController {
 
         loadButton.setOnClickListener(v -> loadModel());
         sendButton.setOnClickListener(v -> sendMessage());
+        modeButton.setOnClickListener(v -> {
+            agentRuntime.cycleMode();
+            modeButton.setText(agentRuntime.modeLabel());
+            append("\n[AI autonomy: " + agentRuntime.modeLabel() + "]\n");
+        });
     }
 
     private void enableSplit() {
@@ -200,6 +208,7 @@ public final class AiPaneController {
         messageInput.setText("");
         append("\nYOU > " + text + "\n");
         history.add(message("user", text));
+        agentRuntime.rememberUser(text);
         busy = true;
         sendButton.setEnabled(false);
         worker.execute(() -> {
@@ -215,56 +224,26 @@ public final class AiPaneController {
     }
 
     private void runAgentLoop() throws Exception {
-        for (int step = 0; step < 8; step++) {
-            setStatus("HF LOCAL · thinking…");
-            String full = llama.chat(history, config.systemPrompt);
-            history.add(message("assistant", full));
+        NeverSoftAgentRuntime.Ui ui = new NeverSoftAgentRuntime.Ui() {
+            @Override public void status(String value) { setStatus(value); }
+            @Override public void append(String value) { AiPaneController.this.append(value); }
+        };
 
-            String visible = AgentProtocol.stripRunBlocks(full);
+        for (int step = 0; step < AgentProtocol.DEFAULT_MAX_ITERATIONS; step++) {
+            setStatus("HF LOCAL · thinking…");
+            String full = llama.chat(history, agentRuntime.systemPrompt(config));
+            history.add(message("assistant", full));
+            agentRuntime.rememberAssistant(full);
+
+            String visible = AgentProtocol.stripActionBlocks(full);
             if (!visible.isEmpty()) append("AI > " + visible + "\n");
-            List<String> commands = AgentProtocol.parseRunBlocks(full);
-            if (commands.isEmpty()) {
+            if (!agentRuntime.executeActions(full, history, ui)) {
                 setStatus("HF LOCAL · ready");
                 return;
             }
-
-            StringBuilder script = new StringBuilder();
-            for (String command : commands) {
-                CommandRisk.Result risk = CommandRisk.analyze(command);
-                if (risk.requiresApproval(config.autoRunSafe) && !requestApproval(command, risk)) {
-                    append("$ " + command + "\n[blocked]\n");
-                    history.add(message("user", "[shell output]\nCommand was blocked by the user: " + command));
-                    script.setLength(0);
-                    break;
-                }
-                script.append(command).append('\n');
-            }
-            if (script.length() == 0) continue;
-
-            setStatus("HF LOCAL · working…");
-            append("$ " + script.toString().trim().replace("\n", "\n$ ") + "\n");
-            ShellRuntime.Result result = ShellRuntime.run(activity, script.toString());
-            String output = result.output == null || result.output.isEmpty() ? "(no output)" : result.output;
-            append(output + "\n");
-            if (output.length() > 6000) output = output.substring(0, 6000) + "\n…(truncated)";
-            history.add(message("user", "[shell output, exit=" + result.exitCode + "]\n" + output));
         }
-        append("AI > Paused after 8 tool steps. Send 'continue' to keep going.\n");
+        append("AI > Paused after " + AgentProtocol.DEFAULT_MAX_ITERATIONS + " tool steps. Send 'continue' to keep going.\n");
         setStatus("HF LOCAL · ready");
-    }
-
-    private boolean requestApproval(String command, CommandRisk.Result risk) throws InterruptedException {
-        CountDownLatch latch = new CountDownLatch(1);
-        AtomicBoolean approved = new AtomicBoolean(false);
-        main.post(() -> new AlertDialog.Builder(activity)
-            .setTitle("Allow AI command?")
-            .setMessage(command + "\n\n" + String.join("\n", risk.reasons))
-            .setNegativeButton("Block", (d, w) -> latch.countDown())
-            .setPositiveButton("Run", (d, w) -> { approved.set(true); latch.countDown(); })
-            .setOnCancelListener(d -> latch.countDown())
-            .show());
-        latch.await();
-        return approved.get();
     }
 
     private JSONObject message(String role, String content) {
@@ -272,9 +251,7 @@ public final class AiPaneController {
         catch (Exception impossible) { return new JSONObject(); }
     }
 
-    private void setStatus(String value) {
-        main.post(() -> status.setText(value));
-    }
+    private void setStatus(String value) { main.post(() -> status.setText(value)); }
 
     private void append(String value) {
         main.post(() -> {
