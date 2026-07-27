@@ -1,57 +1,92 @@
-# Phase 1 — Native NeverSoft base
+# Phase 1 — Operational NeverSoft shell + local Hugging Face AI
 
-## Scope
+## Product gate
 
-Phase 1 is only the Termux remake. No AI, dashboard, model runtime, or assistant integration belongs in this phase.
+NeverSoft is not required to be a byte-for-byte Termux fork. The goal is one Android APK with:
 
-## Identity
+- a real interactive local shell and PTY;
+- a practical Termux-class package/tool environment;
+- Android shared-storage access;
+- GitHub repo download/install capability;
+- Hugging Face GGUF models running locally;
+- AI tool execution against the same NeverSoft HOME/PREFIX/files/processes as the visible terminal;
+- top AI / bottom terminal split screen with a draggable divider.
 
-- Android application ID: `com.neversoft.shell`
-- App data directory: `/data/data/com.neversoft.shell`
-- Rootfs: `/data/data/com.neversoft.shell/files`
-- Home: `/data/data/com.neversoft.shell/files/home`
-- Prefix: `/data/data/com.neversoft.shell/files/usr`
-- Native execution only; no proot compatibility layer
+## Runtime strategy
 
-## Gate 1 — Bootstrap
+To get an operational environment quickly, NeverSoft ships a pinned official Termux bootstrap instead of rebuilding the entire Termux package graph in CI.
 
-Build an aarch64 bootstrap from source for the NeverSoft prefix using the upstream `termux-packages` build system. The bootstrap must include the same core package class as a normal Termux bootstrap: apt, bash, coreutils, termux-core, termux-exec, termux-tools, dpkg support and required runtime libraries.
+The physical environment remains NeverSoft-owned:
 
-Success means every executable and library in the bootstrap resolves the NeverSoft prefix and no executable depends on `/data/data/com.termux/files/usr`.
+- application ID: `com.neversoft.shell`
+- data directory: `/data/data/com.neversoft.shell`
+- home: `/data/data/com.neversoft.shell/files/home`
+- prefix: `/data/data/com.neversoft.shell/files/usr`
 
-## Gate 2 — App shell
+Some upstream Termux binaries/packages still contain `/data/data/com.termux/files/usr` as a compiled-in absolute path. NeverSoft uses a small `proot` compatibility alias so that historical path resolves to the same physical NeverSoft prefix. It is not a second Alpine/Debian rootfs and does not create a separate AI sandbox.
 
-Fork the Termux 0.118.3 Android app and change the Android application ID, app constants, bootstrap source and branding needed to launch the custom bootstrap. Keep internal Java package names unless changing them is technically necessary; Android identity is the application ID, not the Java source namespace.
+The visible terminal and AI command runner therefore share the same files, installed packages, projects and processes.
 
-Success means stock Termux and NeverSoft can be installed at the same time and NeverSoft opens a working native bash session.
+## Build
 
-## Gate 3 — Package repository
+`./scripts/phase1-native-base.sh`
 
-NeverSoft packages cannot be mixed with stock Termux packages because they are compiled for different absolute prefixes. Build and publish a NeverSoft APT repository, then make `pkg` and `apt` use only that repository.
+1. downloads the pinned ARM64 Termux bootstrap;
+2. injects NeverSoft helpers;
+3. prepares the NeverSoft-owned Android app module while reusing Termux terminal-view/emulator libraries;
+4. embeds the bootstrap;
+5. builds an ARM64 APK.
 
-Success means `pkg update`, `pkg upgrade`, install, remove and dependency resolution work without contacting a stock Termux package repository.
+This intentionally removes the previous multi-hour source rebuild from the normal APK loop.
 
-## Gate 4 — Package waves
+## First-launch shell setup
 
-Packages are expanded in dependency-aware waves. Each wave must build, install and execute before the next begins.
+The app extracts the bootstrap into NeverSoft's prefix, relocates symlinks and apt/dpkg state, then attempts to install the small path-compatibility layer. If the device is offline, the base shell still opens and compatibility setup can be retried later.
 
-1. Bootstrap/core
-2. Development base: git, openssh, curl, wget, python, nodejs, clang, cmake, make, pkg-config
-3. Common CLI: ripgrep, jq, tmux, htop, ffmpeg, rsync, zip/unzip, tar utilities
-4. Languages/toolchains: rust, golang, ruby, php and associated build dependencies
-5. Extended main repository
-6. X11 packages
-7. Root/optional packages where applicable
+Useful commands include:
 
-Failures go into a reproducible build-failure queue. Do not hand-edit thousands of packages preemptively.
+- `pkg install git`
+- `pkg install python`
+- `pkg install nodejs`
+- `pkg install openssh`
+- `ghget owner/repo`
+- `storage-setup`
 
-## Accuracy rule
+## Hugging Face local AI
 
-A package is considered ported only when:
+The top pane is local-first and Hugging Face specific:
 
-- it builds against the NeverSoft prefix;
-- its package metadata contains the correct prefix;
-- dynamic linker/interpreter paths are correct;
-- it installs through NeverSoft APT;
-- a basic runtime smoke test succeeds;
-- scanning finds no executable/runtime dependency on `/data/data/com.termux`.
+1. paste a `huggingface.co`/`hf.co` GGUF download URL;
+2. optionally provide an HF token for private/gated repos;
+3. NeverSoft downloads the model under its private `files/models/` directory;
+4. NeverSoft installs the Termux `llama-cpp` package into the same shell environment;
+5. `llama-server` starts on `127.0.0.1:8080`;
+6. the top chat uses its OpenAI-compatible `/v1/chat/completions` endpoint;
+7. model `run` blocks are executed by `ShellRuntime` in the same HOME/PREFIX as the terminal;
+8. caution/destructive AI commands require user approval.
+
+No external cloud AI provider is required for this path.
+
+## Operational smoke test
+
+A build is useful when the installed APK can demonstrate:
+
+```sh
+pwd
+ls
+mkdir -p ~/test
+echo hello > ~/test/file.txt
+cat ~/test/file.txt
+storage-setup
+cd ~/storage/downloads
+pkg update
+pkg install git curl
+
+ghget ether4o4/shell-ai-scripts ~/shell-ai-scripts
+```
+
+Then load a Hugging Face GGUF in the top pane and ask the model to inspect/create/edit a file. The resulting changes must be visible immediately from the bottom terminal.
+
+## Next after this gate
+
+Only after the operational smoke test passes: improve model presets, persistent chats, process management, MCP/tools, GitHub credentials, package UX, signing, and broader polish.
