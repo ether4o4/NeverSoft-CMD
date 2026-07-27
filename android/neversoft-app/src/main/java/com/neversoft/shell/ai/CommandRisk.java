@@ -23,10 +23,6 @@ public final class CommandRisk {
             this.level = level;
             this.reasons = Collections.unmodifiableList(reasons);
         }
-
-        public boolean requiresApproval(boolean autoRunSafe) {
-            return level == Level.DESTRUCTIVE || (level == Level.CAUTION && !autoRunSafe);
-        }
     }
 
     private static final class Rule {

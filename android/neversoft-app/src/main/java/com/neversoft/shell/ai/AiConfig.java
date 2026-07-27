@@ -1,12 +1,7 @@
 package com.neversoft.shell.ai;
 
-/** NeverSoft AI configuration. Hugging Face local GGUF is the default path. */
+/** NeverSoft AI configuration for the local Hugging Face GGUF path. */
 public final class AiConfig {
-    public enum Provider {
-        HUGGING_FACE_LOCAL,
-        OPENAI_COMPATIBLE
-    }
-
     /** CClaw-style autonomy levels for AI-initiated actions. */
     public enum AutonomyMode {
         READ_ONLY,
@@ -33,25 +28,5 @@ public final class AiConfig {
         "- When the task is complete, answer normally without an action block.\n" +
         "- If no action is needed, do not emit a run or skill block.";
 
-    public Provider provider = Provider.HUGGING_FACE_LOCAL;
-    public String baseUrl = "http://127.0.0.1:8080/v1";
-    public String model = "";
-    public String apiKey = "";
-    public double temperature = 0.4;
     public String systemPrompt = DEFAULT_SYSTEM_PROMPT;
-    public boolean autoRunSafe = true;
-    public AutonomyMode autonomyMode = AutonomyMode.SUPERVISED;
-
-    public AiConfig copy() {
-        AiConfig out = new AiConfig();
-        out.provider = provider;
-        out.baseUrl = baseUrl;
-        out.model = model;
-        out.apiKey = apiKey;
-        out.temperature = temperature;
-        out.systemPrompt = systemPrompt;
-        out.autoRunSafe = autoRunSafe;
-        out.autonomyMode = autonomyMode;
-        return out;
-    }
 }

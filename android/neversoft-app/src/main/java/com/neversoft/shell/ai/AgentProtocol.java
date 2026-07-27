@@ -60,44 +60,12 @@ public final class AgentProtocol {
         return SKILL_BLOCK.matcher(RUN_BLOCK.matcher(text).replaceAll("")).replaceAll("").trim();
     }
 
-    public static String stripRunBlocks(String text) {
-        if (text == null || text.isEmpty()) return "";
-        return RUN_BLOCK.matcher(text).replaceAll("").trim();
-    }
-
-    public static String formatCommandResults(List<CommandResult> results) {
-        StringBuilder out = new StringBuilder("Command output:\n");
-        for (int i = 0; i < results.size(); i++) {
-            CommandResult result = results.get(i);
-            if (i > 0) out.append("\n\n");
-            out.append("$ ").append(result.command).append('\n');
-            if (!result.approved) out.append("[blocked by user]");
-            else if (result.output == null || result.output.isEmpty()) out.append("(no output)");
-            else out.append(result.output);
-        }
-        return out.toString();
-    }
-
     public static final class SkillCall {
         public final String id;
         public final JSONObject args;
         public SkillCall(String id, JSONObject args) {
             this.id = id;
             this.args = args == null ? new JSONObject() : args;
-        }
-    }
-
-    public static final class CommandResult {
-        public final String command;
-        public final String output;
-        public final boolean approved;
-        public final int exitCode;
-
-        public CommandResult(String command, String output, boolean approved, int exitCode) {
-            this.command = command;
-            this.output = output;
-            this.approved = approved;
-            this.exitCode = exitCode;
         }
     }
 }
