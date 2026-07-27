@@ -43,14 +43,27 @@ require_text "neversoft-app/src/main/res/layout/activity_main.xml" "@+id/split_h
 require_text "neversoft-app/src/main/res/layout/activity_main.xml" "@+id/terminal_view"
 require_text "neversoft-app/src/main/java/com/neversoft/shell/MainActivity.java" "new TerminalSession"
 require_text "neversoft-app/src/main/java/com/neversoft/shell/BootstrapInstaller.java" "SYMLINKS.txt"
+require_text "neversoft-app/src/main/java/com/neversoft/shell/ShellRuntime.java" "STOCK_PREFIX"
+require_text "neversoft-app/src/main/java/com/neversoft/shell/ai/HuggingFaceModelManager.java" "huggingface.co"
 require_text "terminal-emulator/build.gradle" "abiFilters 'arm64-v8a'"
 
-if grep -RIn --exclude-dir=build '/data/data/com\.termux' "$MODULE"; then
-  echo "ERROR: NeverSoft-owned app module contains stock Termux runtime path" >&2
-  fail=1
-fi
+# Historical /data/data/com.termux is now an intentional *virtual alias* used only
+# by the compatibility layer for stock Termux packages with absolute paths. It
+# must never become NeverSoft's real data/home/prefix identity anywhere else.
+mapfile -t stock_path_hits < <(grep -RIl --exclude-dir=build '/data/data/com\.termux' "$MODULE" || true)
+for file in "${stock_path_hits[@]}"; do
+  rel="${file#$MODULE/}"
+  case "$rel" in
+    src/main/java/com/neversoft/shell/ShellRuntime.java|src/main/java/com/neversoft/shell/BootstrapInstaller.java)
+      ;;
+    *)
+      echo "ERROR: unexpected stock Termux runtime path outside compatibility layer: $rel" >&2
+      fail=1
+      ;;
+  esac
+done
 
-if grep -RIn --exclude-dir=build 'applicationId[[:space:]]*\"com\.termux\"' "$MODULE"; then
+if grep -RIn --exclude-dir=build 'applicationId[[:space:]]*"com\.termux"' "$MODULE"; then
   echo "ERROR: NeverSoft-owned app module contains stock Termux applicationId" >&2
   fail=1
 fi
