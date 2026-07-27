@@ -44,20 +44,21 @@ require_text "neversoft-app/src/main/res/layout/activity_main.xml" "@+id/termina
 require_text "neversoft-app/src/main/java/com/neversoft/shell/MainActivity.java" "new TerminalSession"
 require_text "neversoft-app/src/main/java/com/neversoft/shell/BootstrapInstaller.java" "SYMLINKS.txt"
 require_text "neversoft-app/src/main/java/com/neversoft/shell/ShellRuntime.java" "STOCK_PREFIX"
+require_text "neversoft-app/src/main/java/com/neversoft/shell/RuntimeRepair.java" "Dir::Bin::apt-key"
 require_text "neversoft-app/src/main/java/com/neversoft/shell/ai/HuggingFaceModelManager.java" "huggingface.co"
 require_text "terminal-emulator/build.gradle" "abiFilters 'arm64-v8a'"
 
-# Historical /data/data/com.termux is now an intentional *virtual alias* used only
-# by the compatibility layer for stock Termux packages with absolute paths. It
-# must never become NeverSoft's real data/home/prefix identity anywhere else.
+# Historical /data/data/com.termux is allowed only in the explicit relocation
+# code that recognizes/rewrites upstream Termux package paths. It must never be
+# NeverSoft's actual application identity.
 mapfile -t stock_path_hits < <(grep -RIl --exclude-dir=build '/data/data/com\.termux' "$MODULE" || true)
 for file in "${stock_path_hits[@]}"; do
   rel="${file#$MODULE/}"
   case "$rel" in
-    src/main/java/com/neversoft/shell/ShellRuntime.java|src/main/java/com/neversoft/shell/BootstrapInstaller.java)
+    src/main/java/com/neversoft/shell/ShellRuntime.java|src/main/java/com/neversoft/shell/BootstrapInstaller.java|src/main/java/com/neversoft/shell/RuntimeRepair.java)
       ;;
     *)
-      echo "ERROR: unexpected stock Termux runtime path outside compatibility layer: $rel" >&2
+      echo "ERROR: unexpected stock Termux runtime path outside relocation layer: $rel" >&2
       fail=1
       ;;
   esac
