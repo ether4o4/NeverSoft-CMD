@@ -6,7 +6,6 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -18,13 +17,13 @@ import java.util.Map;
  * absolute path so stock Termux packages with compiled-in paths remain usable.
  * There is no second Linux rootfs: both views operate on the same HOME/PREFIX.
  */
-final class ShellRuntime {
-    static final String STOCK_PREFIX = "/data/data/com.termux/files/usr";
-    static final String STOCK_HOME = "/data/data/com.termux/files/home";
+public final class ShellRuntime {
+    public static final String STOCK_PREFIX = "/data/data/com.termux/files/usr";
+    public static final String STOCK_HOME = "/data/data/com.termux/files/home";
 
-    static final class Result {
-        final int exitCode;
-        final String output;
+    public static final class Result {
+        public final int exitCode;
+        public final String output;
         Result(int exitCode, String output) {
             this.exitCode = exitCode;
             this.output = output;
@@ -33,18 +32,12 @@ final class ShellRuntime {
 
     private ShellRuntime() {}
 
-    static File prefix(Context context) { return new File(context.getFilesDir(), "usr"); }
-    static File home(Context context) { return new File(context.getFilesDir(), "home"); }
-    static File tmp(Context context) { return new File(prefix(context), "tmp"); }
-    static File proot(Context context) { return new File(prefix(context), "bin/proot"); }
+    public static File prefix(Context context) { return new File(context.getFilesDir(), "usr"); }
+    public static File home(Context context) { return new File(context.getFilesDir(), "home"); }
+    public static File tmp(Context context) { return new File(prefix(context), "tmp"); }
+    public static File proot(Context context) { return new File(prefix(context), "bin/proot"); }
 
-    /**
-     * Install the tiny path-compatibility dependency without invoking dpkg
-     * maintainer scripts. This follows the proven standalone-Android approach:
-     * apt resolves/downloads the packages, dpkg-deb extracts them, and we copy
-     * only the Termux prefix payload into NeverSoft's prefix.
-     */
-    static synchronized void ensureCompatibility(Context context) throws Exception {
+    public static synchronized void ensureCompatibility(Context context) throws Exception {
         if (proot(context).isFile()) return;
 
         File p = prefix(context);
@@ -71,7 +64,7 @@ final class ShellRuntime {
         }
     }
 
-    static Result run(Context context, String command) throws Exception {
+    public static Result run(Context context, String command) throws Exception {
         ensureCompatibility(context);
         File p = prefix(context);
         File h = home(context);
@@ -97,7 +90,7 @@ final class ShellRuntime {
         return capture(pb);
     }
 
-    static void ensurePackages(Context context, String... packages) throws Exception {
+    public static void ensurePackages(Context context, String... packages) throws Exception {
         if (packages == null || packages.length == 0) return;
         StringBuilder list = new StringBuilder();
         for (String pkg : packages) {
@@ -115,12 +108,12 @@ final class ShellRuntime {
         }
     }
 
-    static String terminalExecutable(Context context) {
+    public static String terminalExecutable(Context context) {
         File proot = proot(context);
         return proot.isFile() ? proot.getAbsolutePath() : new File(prefix(context), "bin/bash").getAbsolutePath();
     }
 
-    static String[] terminalArgs(Context context) {
+    public static String[] terminalArgs(Context context) {
         File p = prefix(context);
         File h = home(context);
         File proot = proot(context);
@@ -139,7 +132,7 @@ final class ShellRuntime {
         };
     }
 
-    static void applyEnvironment(Map<String, String> env, Context context) {
+    public static void applyEnvironment(Map<String, String> env, Context context) {
         File p = prefix(context);
         File h = home(context);
         File t = tmp(context);
