@@ -32,7 +32,8 @@ public final class AiPaneController {
     private final FrameLayout aiPane;
     private final View terminalPane;
     private final View splitHandle;
-    private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final ExecutorService modelWorker = Executors.newSingleThreadExecutor();
+    private final ExecutorService agentWorker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final LocalLlamaRuntime llama;
     private final AiConfig config = new AiConfig();
@@ -48,7 +49,8 @@ public final class AiPaneController {
     private Button loadButton;
     private Button modeButton;
     private ScrollView transcriptScroll;
-    private volatile boolean busy;
+    private volatile boolean modelBusy;
+    private volatile boolean chatBusy;
 
     public AiPaneController(Activity activity, FrameLayout aiPane, View terminalPane, View splitHandle) {
         this.activity = activity;
@@ -59,12 +61,21 @@ public final class AiPaneController {
         this.agentRuntime = new NeverSoftAgentRuntime(activity);
         buildUi();
         enableSplit();
+
+        // Recover a healthy server after Activity/UI recreation instead of leaving Send disabled.
+        modelWorker.execute(() -> {
+            if (llama.isReady()) {
+                setStatus("HF LOCAL · ready");
+                main.post(() -> sendButton.setEnabled(true));
+            }
+        });
     }
 
     public void destroy() {
         llama.stop();
         agentRuntime.close();
-        worker.shutdownNow();
+        modelWorker.shutdownNow();
+        agentWorker.shutdownNow();
     }
 
     private void buildUi() {
@@ -78,14 +89,24 @@ public final class AiPaneController {
         LinearLayout titleRow = new LinearLayout(activity);
         titleRow.setOrientation(LinearLayout.HORIZONTAL);
         titleRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        LinearLayout heading = new LinearLayout(activity);
+        heading.setOrientation(LinearLayout.VERTICAL);
         TextView title = text("NeverSoft AI", 14, Color.rgb(242, 242, 242));
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        status = text("HF LOCAL · model not loaded", 11, Color.rgb(160, 160, 160));
+        status = text("HF LOCAL · model not loaded", 10, Color.rgb(160, 160, 160));
+        heading.addView(title);
+        heading.addView(status);
+        titleRow.addView(heading, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        Button osintButton = button("OSINT");
+        LinearLayout.LayoutParams osintLp = new LinearLayout.LayoutParams(dp(66), dp(34));
+        osintLp.setMargins(dp(5), 0, 0, 0);
+        titleRow.addView(osintButton, osintLp);
+
         modeButton = button(agentRuntime.modeLabel());
-        titleRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        titleRow.addView(status);
-        LinearLayout.LayoutParams modeLp = new LinearLayout.LayoutParams(dp(88), dp(32));
-        modeLp.setMargins(dp(7), 0, 0, 0);
+        LinearLayout.LayoutParams modeLp = new LinearLayout.LayoutParams(dp(82), dp(34));
+        modeLp.setMargins(dp(5), 0, 0, 0);
         titleRow.addView(modeButton, modeLp);
         root.addView(titleRow);
 
@@ -104,7 +125,7 @@ public final class AiPaneController {
         setup.addView(loadButton, loadLp);
         root.addView(setup);
 
-        transcript = text("Paste a Hugging Face GGUF URL above. NeverSoft skills live in ~/skills and are exposed to the local model.\n", 12, Color.rgb(224, 224, 224));
+        transcript = text("Paste a Hugging Face GGUF URL above. NeverSoft skills live in ~/skills and are exposed to the local model. Tap OSINT for bulk no-key searches.\n", 12, Color.rgb(224, 224, 224));
         transcript.setTypeface(Typeface.MONOSPACE);
         transcript.setTextIsSelectable(true);
         transcriptScroll = new ScrollView(activity);
@@ -126,6 +147,7 @@ public final class AiPaneController {
 
         loadButton.setOnClickListener(v -> loadModel());
         sendButton.setOnClickListener(v -> sendMessage());
+        osintButton.setOnClickListener(v -> new OsintDashboard(activity).show());
         modeButton.setOnClickListener(v -> {
             agentRuntime.cycleMode();
             modeButton.setText(agentRuntime.modeLabel());
@@ -170,7 +192,7 @@ public final class AiPaneController {
     }
 
     private void loadModel() {
-        if (busy) return;
+        if (modelBusy) return;
         String url = modelUrlInput.getText().toString().trim();
         String token = tokenInput.getText().toString().trim();
         if (url.isEmpty()) {
@@ -179,46 +201,59 @@ public final class AiPaneController {
         }
         HuggingFaceModelManager.setToken(activity, token);
         String outputName = nameFromUrl(url);
-        busy = true;
+        modelBusy = true;
         loadButton.setEnabled(false);
-        sendButton.setEnabled(false);
-        worker.execute(() -> {
+        if (!llama.isReady()) sendButton.setEnabled(false);
+
+        modelWorker.execute(() -> {
             try {
                 File model = HuggingFaceModelManager.download(activity, url, outputName,
                     (phase, pct) -> setStatus("HF LOCAL · " + phase + " " + pct + "%"));
-                setStatus("HF LOCAL · installing llama.cpp…");
+                setStatus("HF LOCAL · starting llama.cpp…");
                 llama.start(model);
                 setStatus("HF LOCAL · ready · " + model.getName());
                 append("\n[local model ready: " + model.getName() + "]\n");
                 main.post(() -> sendButton.setEnabled(true));
             } catch (Throwable t) {
                 append("\n[AI setup failed: " + safeMessage(t) + "]\n");
-                setStatus("HF LOCAL · setup failed");
+                if (llama.isReady()) {
+                    setStatus("HF LOCAL · ready · reload failed");
+                    main.post(() -> sendButton.setEnabled(true));
+                } else {
+                    setStatus("HF LOCAL · setup failed");
+                }
             } finally {
-                busy = false;
+                modelBusy = false;
                 main.post(() -> loadButton.setEnabled(true));
             }
         });
     }
 
     private void sendMessage() {
-        if (busy || !llama.isRunning()) return;
+        if (chatBusy) return;
+        if (!llama.isReady()) {
+            append("\n[AI server is not ready. Tap Load to start the local model.]\n");
+            setStatus("HF LOCAL · server not ready");
+            sendButton.setEnabled(false);
+            return;
+        }
         String text = messageInput.getText().toString().trim();
         if (text.isEmpty()) return;
         messageInput.setText("");
         append("\nYOU > " + text + "\n");
         history.add(message("user", text));
         agentRuntime.rememberUser(text);
-        busy = true;
+        chatBusy = true;
         sendButton.setEnabled(false);
-        worker.execute(() -> {
+
+        agentWorker.execute(() -> {
             try {
                 runAgentLoop();
             } catch (Throwable t) {
                 append("\n[AI error: " + safeMessage(t) + "]\n");
             } finally {
-                busy = false;
-                main.post(() -> sendButton.setEnabled(llama.isRunning()));
+                chatBusy = false;
+                main.post(() -> sendButton.setEnabled(llama.isReady()));
             }
         });
     }
