@@ -6,14 +6,20 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.neversoft.shell.ai.AiPaneController;
@@ -23,6 +29,7 @@ import com.termux.view.TerminalView;
 import com.termux.view.TerminalViewClient;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 
 public final class MainActivity extends Activity implements TerminalSessionClient, TerminalViewClient {
     private static final String TAG = "NeverSoft";
@@ -48,20 +55,76 @@ public final class MainActivity extends Activity implements TerminalSessionClien
         terminalView.setTerminalViewClient(this);
         terminalView.setTextSize(terminalTextSize);
         terminalView.setVisibility(View.INVISIBLE);
+        installTerminalToolbar();
 
         statusText.setText("Preparing NeverSoft shell...");
         BootstrapInstaller.ensureInstalled(this, new BootstrapInstaller.Callback() {
-            @Override
-            public void onReady() {
-                runOnUiThread(MainActivity.this::prepareStorageThenStartShell);
-            }
-
-            @Override
-            public void onError(String message, Throwable error) {
+            @Override public void onReady() { runOnUiThread(MainActivity.this::prepareStorageThenStartShell); }
+            @Override public void onError(String message, Throwable error) {
                 Log.e(TAG, "Bootstrap install failed", error);
                 runOnUiThread(() -> statusText.setText("NeverSoft bootstrap failed\n" + message));
             }
         });
+    }
+
+    private void installTerminalToolbar() {
+        LinearLayout root = findViewById(R.id.root);
+        HorizontalScrollView scroller = new HorizontalScrollView(this);
+        scroller.setHorizontalScrollBarEnabled(false);
+        scroller.setFillViewport(false);
+        scroller.setBackgroundColor(Color.rgb(24, 24, 24));
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(4), dp(3), dp(4), dp(3));
+        scroller.addView(row, new HorizontalScrollView.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        addKey(row, "⌨", this::showKeyboard);
+        addKey(row, "CTRL+C", () -> sendBytes(new byte[] {3}));
+        addKey(row, "CTRL+D", () -> sendBytes(new byte[] {4}));
+        addKey(row, "ESC", () -> sendBytes(new byte[] {27}));
+        addKey(row, "TAB", () -> sendBytes(new byte[] {9}));
+        addKey(row, "←", () -> sendAnsi("\u001b[D"));
+        addKey(row, "↑", () -> sendAnsi("\u001b[A"));
+        addKey(row, "↓", () -> sendAnsi("\u001b[B"));
+        addKey(row, "→", () -> sendAnsi("\u001b[C"));
+        addKey(row, "HOME", () -> sendAnsi("\u001b[H"));
+        addKey(row, "END", () -> sendAnsi("\u001b[F"));
+
+        // Root order: AI, split rail, terminal, toolbar, status.
+        root.addView(scroller, 3, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(42)));
+    }
+
+    private void addKey(LinearLayout row, String label, Runnable action) {
+        Button key = new Button(this);
+        key.setText(label);
+        key.setTextSize(11);
+        key.setTextColor(Color.WHITE);
+        key.setAllCaps(false);
+        key.setPadding(dp(8), 0, dp(8), 0);
+        key.setMinWidth(0);
+        key.setMinimumWidth(0);
+        key.setBackgroundColor(Color.rgb(45, 45, 45));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, dp(34));
+        lp.setMargins(dp(2), 0, dp(2), 0);
+        row.addView(key, lp);
+        key.setOnClickListener(v -> action.run());
+    }
+
+    private void sendAnsi(String sequence) {
+        sendBytes(sequence.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void sendBytes(byte[] data) {
+        TerminalSession s = session;
+        if (s != null && s.isRunning() && data != null && data.length > 0) {
+            s.write(data, 0, data.length);
+            terminalView.requestFocus();
+        }
     }
 
     private void prepareStorageThenStartShell() {
@@ -88,11 +151,8 @@ public final class MainActivity extends Activity implements TerminalSessionClien
     }
 
     private void setupStorageLinks() {
-        try {
-            BootstrapInstaller.setupSharedStorage(this);
-        } catch (Throwable t) {
-            Log.w(TAG, "Shared storage setup unavailable", t);
-        }
+        try { BootstrapInstaller.setupSharedStorage(this); }
+        catch (Throwable t) { Log.w(TAG, "Shared storage setup unavailable", t); }
     }
 
     private void revealAndStartShell() {
@@ -129,6 +189,10 @@ public final class MainActivity extends Activity implements TerminalSessionClien
         if (imm != null) imm.showSoftInput(terminalView, InputMethodManager.SHOW_IMPLICIT);
     }
 
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
     @Override
     protected void onDestroy() {
         if (aiController != null) aiController.destroy();
@@ -136,23 +200,15 @@ public final class MainActivity extends Activity implements TerminalSessionClien
         super.onDestroy();
     }
 
-    @Override
-    public void onTextChanged(TerminalSession changedSession) {
-        if (changedSession == session) runOnUiThread(terminalView::onScreenUpdated);
-    }
-
-    @Override
-    public void onTitleChanged(TerminalSession changedSession) {}
+    @Override public void onTextChanged(TerminalSession changedSession) { if (changedSession == session) runOnUiThread(terminalView::onScreenUpdated); }
+    @Override public void onTitleChanged(TerminalSession changedSession) {}
 
     @Override
     public void onSessionFinished(TerminalSession finishedSession) {
         runOnUiThread(() -> {
             statusText.setText("Shell exited — tap here to restart");
             statusText.setVisibility(View.VISIBLE);
-            statusText.setOnClickListener(v -> {
-                statusText.setVisibility(View.GONE);
-                startShell();
-            });
+            statusText.setOnClickListener(v -> { statusText.setVisibility(View.GONE); startShell(); });
         });
     }
 
