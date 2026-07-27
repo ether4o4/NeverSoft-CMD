@@ -53,19 +53,4 @@ public final class AgentMemory extends SQLiteOpenHelper {
         return out;
     }
 
-    public synchronized List<String> recent(int limit) {
-        List<String> out = new ArrayList<>();
-        int safeLimit = Math.max(1, Math.min(20, limit));
-        try (Cursor cursor = getReadableDatabase().rawQuery(
-            "SELECT category, content FROM memories ORDER BY created_at DESC LIMIT " + safeLimit, null)) {
-            while (cursor.moveToNext()) {
-                out.add("[" + cursor.getString(0) + "] " + cursor.getString(1));
-            }
-        }
-        return out;
-    }
-
-    public synchronized void clearConversation() {
-        getWritableDatabase().delete("memories", "category=?", new String[] { "conversation" });
-    }
 }

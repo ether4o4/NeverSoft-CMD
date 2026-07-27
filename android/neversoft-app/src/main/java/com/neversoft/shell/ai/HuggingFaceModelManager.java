@@ -7,8 +7,6 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
 
 /** Native Hugging Face GGUF downloader for NeverSoft local AI. */
 public final class HuggingFaceModelManager {
@@ -34,21 +32,6 @@ public final class HuggingFaceModelManager {
 
     public static String getToken(Context context) {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(HF_TOKEN, "");
-    }
-
-    public static List<File> listModels(Context context) {
-        List<File> out = new ArrayList<>();
-        File[] files = modelsDir(context).listFiles();
-        if (files != null) {
-            for (File f : files) if (f.isFile() && f.getName().toLowerCase().endsWith(".gguf") && f.length() > 0) out.add(f);
-        }
-        return out;
-    }
-
-    /** Build a normal Hugging Face resolve URL from repo + filename. */
-    public static String resolveUrl(String repo, String revision, String filename) {
-        String rev = revision == null || revision.trim().isEmpty() ? "main" : revision.trim();
-        return "https://huggingface.co/" + repo.trim() + "/resolve/" + rev + "/" + filename.trim() + "?download=true";
     }
 
     public static File download(Context context, String url, String outputName, Progress progress) throws Exception {
