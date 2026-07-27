@@ -36,6 +36,24 @@ cat > "$APP_DIR/settings.gradle" <<'EOF'
 include ':terminal-emulator', ':terminal-view', ':neversoft-app'
 EOF
 
+# android.system.Os exposes remove(3), not unlink(2), in the public Android API.
+# Keep the repository template simple and normalize the call in the prepared
+# build tree so shared-storage symlink cleanup compiles on our target SDK.
+python3 - "$NEVERSOFT_MODULE/src/main/java/com/neversoft/shell/BootstrapInstaller.java" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+old = "Os.unlink(link.getAbsolutePath());"
+new = "Os.remove(link.getAbsolutePath());"
+if old in text:
+    text = text.replace(old, new)
+elif new not in text:
+    raise SystemExit("Could not normalize Android Os remove call")
+path.write_text(text)
+PY
+
 # Phase 1 is ARM64-only. Avoid building unused emulator JNI ABIs.
 python3 - "$APP_DIR/terminal-emulator/build.gradle" <<'PY'
 from pathlib import Path
