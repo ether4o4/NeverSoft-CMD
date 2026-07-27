@@ -8,7 +8,7 @@ source "$ROOT_DIR/config/neversoft.env"
 REPO_DIR="$ROOT_DIR/artifacts/publish/apt/termux-main"
 PUBLISH_DIR="${NEVERSOFT_PUBLISH_DIR:-$ROOT_DIR/work/package-publish}"
 REMOTE="${NEVERSOFT_GIT_REMOTE:-origin}"
-BRANCH="packages"
+BRANCH="main"
 
 [[ -d "$REPO_DIR/dists" && -d "$REPO_DIR/pool" ]] || {
   echo "ERROR: no generated APT repository. Run scripts/make-apt-repo.sh first." >&2
@@ -19,21 +19,16 @@ rm -rf "$PUBLISH_DIR"
 git clone --no-checkout "$(git -C "$ROOT_DIR" remote get-url "$REMOTE")" "$PUBLISH_DIR"
 pushd "$PUBLISH_DIR" >/dev/null
 
-if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-  git checkout -B "$BRANCH" "origin/$BRANCH"
-else
-  git checkout --orphan "$BRANCH"
-  git rm -rf . >/dev/null 2>&1 || true
-fi
+git checkout -B "$BRANCH" "origin/$BRANCH"
 
 mkdir -p apt/termux-main
 rm -rf apt/termux-main/*
 cp -a "$REPO_DIR"/. apt/termux-main/
 
-cat > README.md <<EOF
+cat > apt/termux-main/README.md <<EOF
 # NeverSoft package repository
 
-This branch is generated. Do not hand-edit package metadata.
+This directory is generated. Do not hand-edit package metadata.
 
 Client source:
 
@@ -53,4 +48,4 @@ git commit -m "Publish NeverSoft APT repository"
 git push origin "$BRANCH"
 popd >/dev/null
 
-echo "Published NeverSoft APT repository to branch '$BRANCH'."
+echo "Published NeverSoft APT repository into '$BRANCH/apt/termux-main'."
