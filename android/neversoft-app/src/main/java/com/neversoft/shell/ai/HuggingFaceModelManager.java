@@ -45,10 +45,7 @@ public final class HuggingFaceModelManager {
         return out;
     }
 
-    /**
-     * Build a normal Hugging Face resolve URL from repo + filename.
-     * Example repo: owner/model-GGUF, file: model.Q4_K_M.gguf
-     */
+    /** Build a normal Hugging Face resolve URL from repo + filename. */
     public static String resolveUrl(String repo, String revision, String filename) {
         String rev = revision == null || revision.trim().isEmpty() ? "main" : revision.trim();
         return "https://huggingface.co/" + repo.trim() + "/resolve/" + rev + "/" + filename.trim() + "?download=true";
@@ -63,6 +60,13 @@ public final class HuggingFaceModelManager {
 
         File dest = new File(modelsDir(context), name);
         File part = new File(dest.getAbsolutePath() + ".part");
+
+        // Completed models are immutable local assets unless the user deletes them.
+        // This prevents a second Load tap from starting another multi-GB download and blocking chat.
+        if (dest.isFile() && dest.length() > 1024L * 1024L) {
+            progress(progress, "Using local model", 100);
+            return dest;
+        }
         if (part.exists()) part.delete();
 
         String token = getToken(context);
