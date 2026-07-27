@@ -53,7 +53,7 @@ public final class ShellRuntime {
         File p = prefix(context);
         File h = home(context);
         File bash = new File(p, "bin/bash");
-        ProcessBuilder pb = new ProcessBuilder(bash.getAbsolutePath(), "-c", command);
+        ProcessBuilder pb = new ProcessBuilder(bash.getAbsolutePath(), "--noprofile", "--norc", "-c", command);
         pb.directory(h);
         pb.redirectErrorStream(true);
         applyEnvironment(pb.environment(), context);
@@ -87,9 +87,9 @@ public final class ShellRuntime {
 
     public static String[] terminalArgs(Context context) {
         File bash = new File(prefix(context), "bin/bash");
-        // Do not use login mode: official Termux bash has a compiled historical
-        // system-profile path. NeverSoft already provides the required environment.
-        return new String[] { bash.getAbsolutePath() };
+        // Official Termux bash has compiled system startup paths under com.termux.
+        // NeverSoft supplies its environment directly, so bypass those files entirely.
+        return new String[] { bash.getAbsolutePath(), "--noprofile", "--norc", "-i" };
     }
 
     public static void applyEnvironment(Map<String, String> env, Context context) {
