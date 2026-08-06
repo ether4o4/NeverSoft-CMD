@@ -5,11 +5,15 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.util.Log;
+import android.widget.Toast;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -42,6 +46,8 @@ public final class MainActivity extends Activity implements TerminalSessionClien
     private TerminalSession session;
     private AiPaneController aiController;
     private int terminalTextSize = 14;
+    private boolean storageLinked;
+    private boolean shellRevealed;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -128,34 +134,90 @@ public final class MainActivity extends Activity implements TerminalSessionClien
     }
 
     private void prepareStorageThenStartShell() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
-            checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            statusText.setText("Allow file access for Downloads/Documents, or deny to use private storage only.");
-            requestPermissions(new String[] {
-                Manifest.permission.READ_EXTERNAL_STORAGE,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
-            }, REQUEST_STORAGE);
+        if (hasStoragePermission()) {
+            setupStorageLinks();
+            revealAndStartShell();
             return;
         }
-        setupStorageLinks();
-        revealAndStartShell();
+        // Android 6+: shared storage is a runtime grant. Ask before touching
+        // /storage/emulated/0 so the system shows the storage prompt.
+        statusText.setText("NeverSoft needs storage access to reach your Downloads, "
+            + "Documents and shared files.\n\nAllow it on the next prompt, or deny to "
+            + "run with private app storage only.");
+        requestPermissions(new String[] {
+            Manifest.permission.READ_EXTERNAL_STORAGE,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+        }, REQUEST_STORAGE);
+    }
+
+    private boolean hasStoragePermission() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.M
+            || checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                == PackageManager.PERMISSION_GRANTED;
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQUEST_STORAGE) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) setupStorageLinks();
-            revealAndStartShell();
+        if (requestCode != REQUEST_STORAGE) return;
+
+        boolean granted = grantResults.length > 0;
+        for (int result : grantResults) {
+            if (result != PackageManager.PERMISSION_GRANTED) granted = false;
         }
+
+        if (granted) {
+            setupStorageLinks();
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                && !shouldShowRequestPermissionRationale(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+            // "Don't ask again" was selected — the system will no longer prompt.
+            // Point the user at Settings so they can still enable it later.
+            Toast.makeText(this,
+                "Storage stays off. Enable it in App info › Permissions, then run "
+                    + "storage-setup.", Toast.LENGTH_LONG).show();
+        } else {
+            Toast.makeText(this,
+                "Running with private storage only. Run storage-setup after granting "
+                    + "access to link shared folders.", Toast.LENGTH_LONG).show();
+        }
+        // The terminal is usable either way; never block shell start on storage.
+        revealAndStartShell();
     }
 
     private void setupStorageLinks() {
-        try { BootstrapInstaller.setupSharedStorage(this); }
-        catch (Throwable t) { Log.w(TAG, "Shared storage setup unavailable", t); }
+        try {
+            BootstrapInstaller.setupSharedStorage(this);
+            storageLinked = true;
+        } catch (Throwable t) {
+            Log.w(TAG, "Shared storage setup unavailable", t);
+        }
+    }
+
+    /** Open this app's system settings so the user can grant storage access. */
+    @SuppressWarnings("unused")
+    private void openAppStorageSettings() {
+        try {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.fromParts("package", getPackageName(), null));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+        } catch (Throwable t) {
+            Log.w(TAG, "Unable to open app settings", t);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // If the user granted storage from Settings while we were backgrounded,
+        // link the shared folders now without requiring a restart.
+        if (shellRevealed && !storageLinked && hasStoragePermission()) {
+            setupStorageLinks();
+        }
     }
 
     private void revealAndStartShell() {
+        shellRevealed = true;
         statusText.setVisibility(View.GONE);
         terminalView.setVisibility(View.VISIBLE);
         if (aiController == null) aiController = new AiPaneController(this, aiPane, terminalView, splitHandle);
