@@ -3,9 +3,21 @@
     package="com.neversoft.shell">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!-- Shared-storage access. NeverSoft targets API 28, so the runtime
+         READ/WRITE prompt grants the app the legacy full-storage view that the
+         terminal exposes under ~/storage. POST_NOTIFICATIONS keeps the runtime
+         prompt working on Android 13+ devices even though the target API stays
+         at 28. MANAGE_EXTERNAL_STORAGE lets the same install request All-files
+         access if it is ever run with a higher target SDK. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
