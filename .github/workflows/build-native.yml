@@ -1,7 +1,12 @@
 name: Build NeverSoft Native APK
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -36,6 +41,21 @@ jobs:
       - name: Build custom bootstrap and APK
         run: ./scripts/phase1-native-base.sh
 
+      - name: Stage release APK with stable name
+        id: stage
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          apk="$(find artifacts/apk -type f -name '*.apk' | sort | head -n1)"
+          if [ -z "$apk" ]; then
+            echo "ERROR: no APK produced by the build" >&2
+            exit 1
+          fi
+          cp -f "$apk" release/neversoft-cmd.apk
+          sha256sum release/neversoft-cmd.apk | tee release/neversoft-cmd.apk.sha256
+          ls -l release/
+          echo "size=$(stat -c%s release/neversoft-cmd.apk)" >> "$GITHUB_OUTPUT"
+
       - name: Upload NeverSoft APK
         uses: actions/upload-artifact@v4
         with:
@@ -52,3 +72,25 @@ jobs:
             artifacts/bootstrap/**
             artifacts/reports/**
           if-no-files-found: warn
+
+      - name: Publish rolling release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-latest
+          name: NeverSoft CMD (latest build)
+          body: |
+            Rolling ARM64 debug build of NeverSoft CMD.
+
+            - Commit: `${{ github.sha }}`
+            - Built: `${{ github.run_id }}` / run #${{ github.run_number }}
+            - App ID: `com.neversoft.shell`
+            - ABI: `arm64-v8a`
+
+            Download: `neversoft-cmd.apk` (debug-signed; enable install from unknown sources).
+          target_commitish: ${{ github.sha }}
+          draft: false
+          prerelease: false
+          make_latest: true
+          files: |
+            release/neversoft-cmd.apk
+            release/neversoft-cmd.apk.sha256
