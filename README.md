@@ -1,5 +1,34 @@
 # NeverSoft CMD
 
+[![Download APK](https://img.shields.io/badge/download-neversoft--cmd.apk-3DDC84?logo=android&logoColor=white&style=for-the-badge)](https://github.com/ether4o4/NeverSoft-CMD/releases/latest/download/neversoft-cmd.apk)
+[![Build NeverSoft Native APK](https://img.shields.io/github/actions/workflow/status/ether4o4/NeverSoft-CMD/build-native.yml?branch=main&label=build&style=flat-square)](https://github.com/ether4o4/NeverSoft-CMD/actions/workflows/build-native.yml)
+[![Release](https://img.shields.io/github/release-date/ether4o4/NeverSoft-CMD?label=last%20build&style=flat-square)](https://github.com/ether4o4/NeverSoft-CMD/releases/tag/android-latest)
+
+## Download
+
+Latest ARM64 (`arm64-v8a`) debug build, rebuilt automatically on every push to `main`:
+
+**<https://github.com/ether4o4/NeverSoft-CMD/releases/latest/download/neversoft-cmd.apk>**
+
+```bash
+curl -fL -o neversoft-cmd.apk \
+  https://github.com/ether4o4/NeverSoft-CMD/releases/latest/download/neversoft-cmd.apk
+```
+
+That URL always points at the newest successful CI build (rolling `android-latest`
+release, stable asset name). A matching `neversoft-cmd.apk.sha256` is published beside it:
+
+```bash
+curl -fL -O https://github.com/ether4o4/NeverSoft-CMD/releases/latest/download/neversoft-cmd.apk.sha256
+sha256sum -c <(sed 's#release/##' neversoft-cmd.apk.sha256)
+```
+
+Notes:
+
+- Application ID `com.neversoft.shell`, installs alongside stock Termux.
+- ARM64 devices only; the build is debug-signed, so allow "install from unknown sources".
+- Because it is debug-signed, upgrading over a differently-signed install requires an uninstall first.
+
 NeverSoft CMD is a personal, independent Termux-compatible Android terminal distribution.
 
 ## Current objective
