@@ -73,6 +73,20 @@ jobs:
             artifacts/reports/**
           if-no-files-found: warn
 
+      - name: Move rolling tag to this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/android-latest" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/android-latest" \
+              -f sha="${GITHUB_SHA}" -F force=true >/dev/null
+          else
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref=refs/tags/android-latest -f sha="${GITHUB_SHA}" >/dev/null
+          fi
+          echo "android-latest -> ${GITHUB_SHA}"
+
       - name: Publish rolling release
         uses: softprops/action-gh-release@v2
         with:
