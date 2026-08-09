@@ -4,6 +4,11 @@ name: Build NeverSoft Native APK
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
   pull_request:
     branches: [main]
   workflow_dispatch:
