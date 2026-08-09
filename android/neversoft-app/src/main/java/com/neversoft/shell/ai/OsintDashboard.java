@@ -49,7 +49,9 @@ public final class OsintDashboard {
 
     private final Activity activity;
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final ExecutorService scans = Executors.newFixedThreadPool(4);
+    // A single queue prevents multiple providers from hammering the same public service.
+    private final ExecutorService scans = Executors.newSingleThreadExecutor();
+    private volatile long lastHeavyRequestAt;
     private final ExecutorService installer = Executors.newSingleThreadExecutor();
     private final AtomicBoolean stopRequested = new AtomicBoolean(false);
     private final List<java.lang.Process> activeProcesses = Collections.synchronizedList(new ArrayList<>());
@@ -261,7 +263,7 @@ public final class OsintDashboard {
             if (taskCount == 0) append("\n[No compatible installed tools. Tap Install pack.]\n");
             final int submitted = taskCount;
             scans.execute(() -> {
-                // Marker only. Executor ordering is not strict across four workers, so UI remains usable while jobs finish.
+                // Marker only. The serialized request queue preserves provider pacing, so UI remains usable while jobs finish.
                 try { Thread.sleep(Math.min(1500L, 200L * Math.max(1, submitted))); } catch (InterruptedException ignored) {}
                 main.post(() -> scanButton.setEnabled(true));
             });
@@ -271,13 +273,65 @@ public final class OsintDashboard {
     private void runOne(Tool tool, String target, String command) {
         if (stopRequested.get()) return;
         append("\n[" + tool.label + "] " + target + "\n");
-        CmdResult r = runCommand(command, tool.deep ? 120 : 90);
+        CmdResult r = null;
+        for (int attempt = 0; attempt < 4 && !stopRequested.get(); attempt++) {
+            paceHeavySearch();
+            r = runCommand(command, tool.deep ? 120 : 90);
+            if (!isRateLimited(r)) break;
+            long wait = retryAfterMillis(r.output, attempt);
+            append("[rate limited; retrying " + tool.label + " in " + (wait / 1000L) + "s]\n");
+            sleepInterruptibly(wait);
+        }
+        if (r == null) r = new CmdResult(130, "stopped");
         String text = trim(r.output, 16000);
         if (text.isEmpty()) text = "(no output)";
         String block = text + "\n[exit " + r.exitCode + "]\n";
         append(block);
         synchronized (report) {
             report.append("\n[").append(tool.label).append("]\n").append(block);
+        }
+    }
+
+    /** Balanced mode: configurable 60-120 second spacing between public-provider searches. */
+    private void paceHeavySearch() {
+        int configured = activity.getSharedPreferences("neversoft_osint", Activity.MODE_PRIVATE)
+            .getInt("balanced_delay_seconds", 90);
+        long center = Math.max(60, Math.min(120, configured)) * 1000L;
+        long jitter = (long)((Math.random() * 60_001L) - 30_000L);
+        long paced = Math.max(60_000L, Math.min(120_000L, center + jitter));
+        long wait = lastHeavyRequestAt + paced - System.currentTimeMillis();
+        if (wait > 0) {
+            append("[Balanced pacing: " + ((wait + 999L) / 1000L) + "s]\n");
+            sleepInterruptibly(wait);
+        }
+        lastHeavyRequestAt = System.currentTimeMillis();
+    }
+
+    private boolean isRateLimited(CmdResult result) {
+        if (result == null) return false;
+        String value = result.output.toLowerCase(Locale.US);
+        return result.exitCode == 429 || value.contains("429") || value.contains("rate limit")
+            || value.contains("too many requests") || value.contains("retry-after");
+    }
+
+    private long retryAfterMillis(String output, int attempt) {
+        if (output != null) {
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("(?i)retry-after[^0-9]{0,8}([0-9]{1,4})").matcher(output);
+            if (m.find()) {
+                try { return Math.max(1L, Math.min(1800L, Long.parseLong(m.group(1)))) * 1000L; }
+                catch (NumberFormatException ignored) {}
+            }
+        }
+        long exponential = 15_000L * (1L << Math.min(5, attempt));
+        return Math.min(300_000L, exponential) + (long)(Math.random() * 5_000L);
+    }
+
+    private void sleepInterruptibly(long millis) {
+        long end = System.currentTimeMillis() + millis;
+        while (!stopRequested.get() && System.currentTimeMillis() < end) {
+            try { Thread.sleep(Math.min(1000L, end - System.currentTimeMillis())); }
+            catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
         }
     }
 
