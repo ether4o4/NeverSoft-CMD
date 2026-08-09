@@ -104,9 +104,15 @@ EOF
   (cd "$tmp" && zip -qr9 "$archive.new" .)
   mv -f "$archive.new" "$archive"
 
-  unzip -Z1 "$archive" | grep -Fxq 'bin/bash' || { echo "ERROR: bootstrap missing bin/bash" >&2; exit 1; }
-  unzip -Z1 "$archive" | grep -Fxq 'bin/apt' || { echo "ERROR: bootstrap missing apt" >&2; exit 1; }
-  unzip -Z1 "$archive" | grep -Fxq 'bin/ghget' || { echo "ERROR: ghget injection failed" >&2; exit 1; }
+  # List entries once into a variable. Piping `unzip -Z1` straight into
+  # `grep -Fxq` makes grep close the pipe on its first match, which sends
+  # SIGPIPE to unzip; under `set -o pipefail` that aborts an otherwise valid
+  # bootstrap. Reading from a here-string avoids the early-close race.
+  local listing
+  listing="$(unzip -Z1 "$archive")"
+  grep -Fxq 'bin/bash' <<<"$listing" || { echo "ERROR: bootstrap missing bin/bash" >&2; exit 1; }
+  grep -Fxq 'bin/apt' <<<"$listing" || { echo "ERROR: bootstrap missing apt" >&2; exit 1; }
+  grep -Fxq 'bin/ghget' <<<"$listing" || { echo "ERROR: ghget injection failed" >&2; exit 1; }
 }
 
 IFS=',' read -ra arches <<< "$ARCHITECTURES"
