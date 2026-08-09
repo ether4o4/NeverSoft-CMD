@@ -58,6 +58,22 @@ public final class AiPaneController {
         this.terminalPane = terminalPane;
         this.splitHandle = splitHandle;
         this.llama = new LocalLlamaRuntime(activity);
+        this.llama.setListener((state, detail) -> {
+            String label;
+            switch (state) {
+                case DOWNLOADING: label = "Downloading model"; break;
+                case MODEL_DOWNLOADED: label = "Model downloaded"; break;
+                case STARTING_SERVER: label = "Starting inference server"; break;
+                case SERVER_STARTING: label = "Loading weights"; break;
+                case SERVER_READY: label = detail.equals("Recovered") ? "Recovered" : "Ready"; break;
+                case GENERATING: label = "Generating…"; break;
+                case SERVER_CRASHED: label = "Crashed · " + detail; break;
+                case ERROR: label = "Error · " + detail; break;
+                default: label = "No model";
+            }
+            setStatus("HF LOCAL · " + label);
+            main.post(() -> sendButton.setEnabled(state == LocalLlamaRuntime.State.SERVER_READY && !chatBusy));
+        });
         this.agentRuntime = new NeverSoftAgentRuntime(activity);
         buildUi();
         enableSplit();
@@ -209,7 +225,9 @@ public final class AiPaneController {
             try {
                 File model = HuggingFaceModelManager.download(activity, url, outputName,
                     (phase, pct) -> setStatus("HF LOCAL · " + phase + " " + pct + "%"));
-                setStatus("HF LOCAL · starting llama.cpp…");
+                setStatus("HF LOCAL · Model downloaded");
+                llama.setModel(model);
+                setStatus("HF LOCAL · Starting inference server");
                 llama.start(model);
                 setStatus("HF LOCAL · ready · " + model.getName());
                 append("\n[local model ready: " + model.getName() + "]\n");
@@ -231,12 +249,6 @@ public final class AiPaneController {
 
     private void sendMessage() {
         if (chatBusy) return;
-        if (!llama.isReady()) {
-            append("\n[AI server is not ready. Tap Load to start the local model.]\n");
-            setStatus("HF LOCAL · server not ready");
-            sendButton.setEnabled(false);
-            return;
-        }
         String text = messageInput.getText().toString().trim();
         if (text.isEmpty()) return;
         messageInput.setText("");
@@ -250,7 +262,7 @@ public final class AiPaneController {
             try {
                 runAgentLoop();
             } catch (Throwable t) {
-                append("\n[AI error: " + safeMessage(t) + "]\n");
+                append("\n[AI error: " + safeMessage(t) + ". Crash log: ~/logs/model.log]\n");
             } finally {
                 chatBusy = false;
                 main.post(() -> sendButton.setEnabled(llama.isReady()));
