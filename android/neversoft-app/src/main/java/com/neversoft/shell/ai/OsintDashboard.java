@@ -295,10 +295,11 @@ public final class OsintDashboard {
     /** Balanced mode: configurable 60-120 second spacing between public-provider searches. */
     private void paceHeavySearch() {
         int configured = activity.getSharedPreferences("neversoft_osint", Activity.MODE_PRIVATE)
-            .getInt("balanced_delay_seconds", 60);
-        long base = Math.max(60, Math.min(120, configured)) * 1000L;
-        long jitter = (long)(Math.random() * Math.min(60_000L, base / 2L));
-        long wait = lastHeavyRequestAt + base + jitter - System.currentTimeMillis();
+            .getInt("balanced_delay_seconds", 90);
+        long center = Math.max(60, Math.min(120, configured)) * 1000L;
+        long jitter = (long)((Math.random() * 60_001L) - 30_000L);
+        long paced = Math.max(60_000L, Math.min(120_000L, center + jitter));
+        long wait = lastHeavyRequestAt + paced - System.currentTimeMillis();
         if (wait > 0) {
             append("[Balanced pacing: " + ((wait + 999L) / 1000L) + "s]\n");
             sleepInterruptibly(wait);
