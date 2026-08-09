@@ -22,7 +22,7 @@ public final class LocalLlamaRuntime {
     public interface Listener { void onState(State state, String detail); }
 
     private static final String TAG = "NeverSoftLlama";
-    public static final int PORT = 8080;
+    public static final int PORT = 18080;
     private final Context context;
     private final ScheduledExecutorService monitor = Executors.newSingleThreadScheduledExecutor();
     private volatile Process process;
@@ -31,6 +31,8 @@ public final class LocalLlamaRuntime {
     private volatile String lastFailure = "";
     private volatile Listener listener;
     private volatile boolean stopping;
+    private volatile int consecutiveFailures;
+    private volatile long nextRestartAt;
 
     public LocalLlamaRuntime(Context context) {
         this.context = context.getApplicationContext();
@@ -56,8 +58,8 @@ public final class LocalLlamaRuntime {
         catch (IllegalThreadStateException alive) { return true; }
     }
 
-    /** Ready means a live server answered /health; a GGUF file alone never qualifies. */
-    public boolean isReady() { return isRunning() && healthCheck(); }
+    /** /health is authoritative, including after Activity recreation loses the Process handle. */
+    public boolean isReady() { return healthCheck(); }
 
     public synchronized void ensureInstalled() throws Exception {
         File server = new File(ShellRuntime.prefix(context), "bin/llama-server");
@@ -74,6 +76,7 @@ public final class LocalLlamaRuntime {
         if (isReady()) { transition(State.SERVER_READY, value.getName()); return; }
 
         stopProcess();
+        stopStaleServers();
         ensureInstalled();
         stopping = false;
         transition(State.STARTING_SERVER, "Preparing llama.cpp");
@@ -93,7 +96,12 @@ public final class LocalLlamaRuntime {
         long deadline = System.currentTimeMillis() + 120_000L;
         while (System.currentTimeMillis() < deadline) {
             if (!isRunning()) throw crashException("llama-server exited during startup");
-            if (healthCheck()) { transition(State.SERVER_READY, value.getName()); return; }
+            if (healthCheck()) {
+                consecutiveFailures = 0;
+                nextRestartAt = 0L;
+                transition(State.SERVER_READY, value.getName());
+                return;
+            }
             Thread.sleep(500L);
         }
         stopProcess();
@@ -152,6 +160,7 @@ public final class LocalLlamaRuntime {
                         + (signal > 0 ? ", signal=" + signal : "")
                         + "; log=" + logFile().getAbsolutePath();
                     appendLog(detail + "\n");
+                    scheduleBackoff();
                     fail(State.SERVER_CRASHED, detail);
                 }
             } catch (Throwable e) { if (!stopping) fail(State.SERVER_CRASHED, reason(e)); }
@@ -163,13 +172,33 @@ public final class LocalLlamaRuntime {
     private void monitorOnce() {
         try {
             if (stopping || model == null || state == State.GENERATING || state == State.STARTING_SERVER
-                    || state == State.SERVER_STARTING) return;
+                    || state == State.SERVER_STARTING || System.currentTimeMillis() < nextRestartAt) return;
             if (!isReady()) {
                 fail(State.SERVER_CRASHED, "Inference server stopped responding");
                 ensureReady();
                 transition(State.SERVER_READY, "Recovered");
             }
-        } catch (Throwable e) { fail(State.SERVER_CRASHED, "Recovery failed: " + reason(e)); }
+        } catch (Throwable e) {
+            scheduleBackoff();
+            fail(State.SERVER_CRASHED, "Recovery failed: " + reason(e));
+        }
+    }
+
+    private void stopStaleServers() {
+        try {
+            Process cleanup = ShellRuntime.processBuilder(context,
+                "pkill -TERM -f '[l]lama-server' >/dev/null 2>&1 || true; sleep 1").start();
+            cleanup.waitFor(3, TimeUnit.SECONDS);
+        } catch (Throwable e) {
+            appendLog("[stale server cleanup] " + reason(e) + "\n");
+        }
+    }
+
+    private void scheduleBackoff() {
+        consecutiveFailures = Math.min(6, consecutiveFailures + 1);
+        long delay = Math.min(60_000L, 3_000L * (1L << Math.min(4, consecutiveFailures - 1)));
+        nextRestartAt = System.currentTimeMillis() + delay;
+        appendLog("[recovery backoff] " + delay + "ms\n");
     }
 
     public boolean healthCheck() {
