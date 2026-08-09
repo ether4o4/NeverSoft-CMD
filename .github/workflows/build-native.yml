@@ -1,4 +1,5 @@
 name: Build NeverSoft Native APK
+# Pull requests validate artifacts; main publishes the rolling installable release.
 
 on:
   push:
