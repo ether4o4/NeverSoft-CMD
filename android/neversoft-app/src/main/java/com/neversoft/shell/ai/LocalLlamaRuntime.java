@@ -64,8 +64,26 @@ public final class LocalLlamaRuntime {
     public synchronized void ensureInstalled() throws Exception {
         File server = new File(ShellRuntime.prefix(context), "bin/llama-server");
         if (server.isFile()) return;
-        ShellRuntime.ensurePackages(context, "llama-cpp");
-        if (!server.isFile()) throw new IllegalStateException("llama-cpp installed but llama-server is missing");
+        try {
+            ShellRuntime.ensurePackages(context, "llama-cpp");
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                "Couldn't install llama-cpp from the NeverSoft package repository. "
+                + "Check the device's network, and make sure llama-cpp has been published to "
+                + "apt/termux-main (build-package-wave.sh 5 aarch64, make-apt-repo.sh, publish-apt-repo.sh). "
+                + "Details: " + shortReason(e), e);
+        }
+        if (!server.isFile()) {
+            throw new IllegalStateException(
+                "llama-cpp installed but the llama-server binary is missing from the NeverSoft prefix.");
+        }
+    }
+
+    private static String shortReason(Throwable t) {
+        String message = t.getMessage();
+        if (message == null || message.trim().isEmpty()) return t.getClass().getSimpleName();
+        message = message.trim();
+        return message.length() > 400 ? message.substring(0, 400) + "…" : message;
     }
 
     public synchronized void start(File value) throws Exception {

@@ -42,5 +42,12 @@
 4|openssl
 4|gnupg
 
-# Wave 5+ will be generated from the full repository after the first four waves
+# Local model runtime. llama-cpp provides the llama-server binary that the
+# NeverSoft AI pane installs on demand (LocalLlamaRuntime.ensureInstalled).
+# Its runtime deps (libandroid-spawn, libc++, libcurl) build alongside it and
+# are picked up into the repo by make-apt-repo.sh. The CPU backend ships in the
+# base package, so inference works without the optional Vulkan/OpenCL backends.
+5|llama-cpp
+
+# Wave 6+ will be generated from the full repository after the waves above
 # prove the prefix, package manager, toolchains and common dependency graph.
