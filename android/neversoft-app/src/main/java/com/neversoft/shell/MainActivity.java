@@ -47,22 +47,24 @@ public final class MainActivity extends Activity implements TerminalSessionClien
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        terminalTextSize = Math.max(10, Math.min(32, getPreferences(0).getInt("terminal_font_sp", 14)));
+        findViewById(R.id.root).setFitsSystemWindows(true);
 
         terminalView = findViewById(R.id.terminal_view);
         aiPane = findViewById(R.id.ai_pane);
         splitHandle = findViewById(R.id.split_handle);
         statusText = findViewById(R.id.status_text);
         terminalView.setTerminalViewClient(this);
-        terminalView.setTextSize(terminalTextSize);
+        terminalView.setTextSize(Math.round(terminalTextSize * getResources().getDisplayMetrics().scaledDensity));
         terminalView.setVisibility(View.INVISIBLE);
         installTerminalToolbar();
 
         statusText.setText("Preparing NeverSoft shell...");
         BootstrapInstaller.ensureInstalled(this, new BootstrapInstaller.Callback() {
-            @Override public void onReady() { runOnUiThread(MainActivity.this::prepareStorageThenStartShell); }
+            @Override public void onReady() { runOnUiThread(() -> { if (!isFinishing() && !isDestroyed()) prepareStorageThenStartShell(); }); }
             @Override public void onError(String message, Throwable error) {
                 Log.e(TAG, "Bootstrap install failed", error);
-                runOnUiThread(() -> statusText.setText("NeverSoft bootstrap failed\n" + message));
+                runOnUiThread(() -> { if (!isFinishing() && !isDestroyed()) statusText.setText("NeverSoft bootstrap failed\n" + message); });
             }
         });
     }
@@ -95,7 +97,7 @@ public final class MainActivity extends Activity implements TerminalSessionClien
 
         // Root order: AI, split rail, terminal, toolbar, status.
         root.addView(scroller, 3, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(42)));
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(54)));
     }
 
     private void addKey(LinearLayout row, String label, Runnable action) {
@@ -106,10 +108,11 @@ public final class MainActivity extends Activity implements TerminalSessionClien
         key.setAllCaps(false);
         key.setPadding(dp(8), 0, dp(8), 0);
         key.setMinWidth(0);
-        key.setMinimumWidth(0);
+        key.setMinimumWidth(dp(48));
+        key.setContentDescription(label);
         key.setBackgroundColor(Color.rgb(45, 45, 45));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, dp(34));
+            ViewGroup.LayoutParams.WRAP_CONTENT, dp(48));
         lp.setMargins(dp(2), 0, dp(2), 0);
         row.addView(key, lp);
         key.setOnClickListener(v -> action.run());
@@ -235,9 +238,10 @@ public final class MainActivity extends Activity implements TerminalSessionClien
     @Override
     public float onScale(float scale) {
         if (scale > 1.12f) terminalTextSize = Math.min(32, terminalTextSize + 1);
-        else if (scale < 0.88f) terminalTextSize = Math.max(8, terminalTextSize - 1);
+        else if (scale < 0.88f) terminalTextSize = Math.max(10, terminalTextSize - 1);
         else return scale;
-        terminalView.setTextSize(terminalTextSize);
+        terminalView.setTextSize(Math.round(terminalTextSize * getResources().getDisplayMetrics().scaledDensity));
+        getPreferences(0).edit().putInt("terminal_font_sp", terminalTextSize).apply();
         return 1.0f;
     }
 

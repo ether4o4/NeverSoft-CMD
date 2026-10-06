@@ -1,5 +1,17 @@
 # NeverSoft CMD
 
+
+## Latest polish test APK
+
+[Download the newest verified test APK — rolling release page](https://github.com/ether4o4/NeverSoft-CMD/releases/tag/polish-test-latest)
+
+This separate prerelease channel contains **test APKs**, for **arm64-v8a** devices, with source commit, package/version, native ABI and SHA-256 recorded on the release page. Open **Download newest verified test APK** on that page. Phone runtime testing is incomplete; test signing may differ from an installed/store version. Private repository downloads require GitHub access.
+
+While this PR remains unmerged, a successful **Polish verification** build on `polish/mobile-2026-10-05` refreshes the channel (remove/reapply the `polish-verify` PR label to run verification). The initial download reuses the already verified polish build. After merge, successful **Build NeverSoft Native APK** builds on `main` also refresh it through `workflow_run`. Only trusted same-repository intended workflows/refs qualify; failed, older or diverging builds leave the working download intact. Versioned APK assets remain available, avoiding a replacement gap. Existing release channels keep their current behavior.
+
+The stable link opens a release page; the highlighted APK filename changes after each accepted build. The channel tag anchors `main`; the release body identifies the actual APK source commit. These README additions and future `main` automation take effect on the default branch only after this PR is merged.
+
+
 [![Download APK](https://img.shields.io/badge/download-neversoft--cmd.apk-3DDC84?logo=android&logoColor=white&style=for-the-badge)](https://github.com/ether4o4/NeverSoft-CMD/releases/latest/download/neversoft-cmd.apk)
 [![Build NeverSoft Native APK](https://img.shields.io/github/actions/workflow/status/ether4o4/NeverSoft-CMD/build-native.yml?branch=main&label=build&style=flat-square)](https://github.com/ether4o4/NeverSoft-CMD/actions/workflows/build-native.yml)
 [![Release](https://img.shields.io/github/release-date/ether4o4/NeverSoft-CMD?label=last%20build&style=flat-square)](https://github.com/ether4o4/NeverSoft-CMD/releases/tag/android-latest)

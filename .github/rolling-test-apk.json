@@ -1,0 +1,10 @@
+{
+  "seed_run": 37363113846,
+  "seed_sha": "9753263b0540ea9a351a97af4542428e907d071e",
+  "seed_apk_sha": "2dc9d8f6c89a13f40f424cc9f6f073477d5444ade8d95f7f1bfe1b7116bb5ae3",
+  "main_path": ".github/workflows/build-native.yml",
+  "main_artifact": "NeverSoft-native-arm64",
+  "selector": "\\.apk$",
+  "asset_prefix": "NeverSoft-CMD-test",
+  "abi": "arm64-v8a"
+}
