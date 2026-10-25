@@ -9,7 +9,7 @@ mkdir -p "$REPORT_DIR"
 : > "$LOG_FILE"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
-echo "NeverSoft Phase 1 native build"
+echo "NeverSoft legacy compatibility baseline build (NOT native-prefix acceptance)"
 echo "Started: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "Branch/commit: ${GITHUB_REF_NAME:-local}/${GITHUB_SHA:-unknown}"
 echo
@@ -18,5 +18,5 @@ echo
 "$ROOT_DIR/scripts/build-app.sh"
 
 echo
-echo "Phase 1 complete: custom ARM64 bootstrap + NeverSoft APK built."
-echo "Next: install on an ARM64 Android device alongside stock Termux and run the smoke-test checklist in docs/PHASE-1-NATIVE-BASE.md."
+echo "Compatibility APK compiled. Milestone 1 is NOT complete."
+echo "Run build-native-bootstrap.sh and the device acceptance tests before claiming an independent package ecosystem."

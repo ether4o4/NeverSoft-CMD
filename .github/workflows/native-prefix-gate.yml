@@ -1,0 +1,42 @@
+name: Native prefix foundation gate
+on:
+  workflow_dispatch:
+  push:
+    branches: [development/next-generation-foundation]
+    paths:
+      - 'scripts/**'
+      - 'config/**'
+      - '.github/workflows/native-prefix-gate.yml'
+permissions:
+  contents: read
+concurrency:
+  group: native-prefix-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  native-prefix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install inspection tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev python3 zip unzip zstd
+          chmod +x scripts/*.sh
+      - name: Run archive safety tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Build real NeverSoft-prefix bootstrap and packages
+        run: bash scripts/build-native-bootstrap.sh aarch64
+      - name: Build test repository metadata
+        run: bash scripts/make-apt-repo.sh aarch64
+      - name: Preserve versioned evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-prefix-${{ github.sha }}
+          path: |
+            artifacts/bootstrap/**
+            artifacts/reports/**
+            artifacts/publish/**
+          if-no-files-found: warn
+          retention-days: 30
