@@ -80,7 +80,9 @@ It rebuilds packages for NeverSoft's prefix and rejects foreign-prefix archives.
 It requires Docker. Do not stage it into the legacy APK yet: native installer
 integration, signing and on-device package transactions remain outstanding.
 
-Artifacts are written under `artifacts/bootstrap/` and `artifacts/apk/`.
+Legacy artifacts are written under `artifacts/bootstrap/` and `artifacts/apk/`.
+Native candidates are isolated under `artifacts/native-bootstrap/`; the legacy
+APK staging script does not consume that directory.
 
 ## Package expansion
 

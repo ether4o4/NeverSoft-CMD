@@ -46,8 +46,59 @@ def inspect_stream(name, stream, errors):
         tail = chunk[-128:]
 
 
+def validate_links(entries, links, errors):
+    """Resolve archive links in prefix-relative space without touching the host.
+
+    Keep '..' components until after expanding intermediate links: normalizing
+    a target first can hide an escape through a directory alias.
+    """
+    targets = {}
+    for link, (target, hardlink) in links.items():
+        if link in ("", ".") or not target or "\x00" in target:
+            errors.append(f"{link}: invalid link")
+            continue
+        if target.startswith("/") or hardlink:
+            rooted = target.lstrip("/")
+            while rooted.startswith("./"):
+                rooted = rooted[2:]
+            if rooted == PREFIX:
+                rooted = ""
+            elif rooted.startswith(PREFIX + "/"):
+                rooted = rooted[len(PREFIX) + 1:]
+            else:
+                errors.append(f"{link}: link escapes prefix")
+                continue
+        else:
+            rooted = posixpath.join(posixpath.dirname(link), target)
+        targets[link] = rooted.split("/")
+
+    for link, parts in targets.items():
+        pending, resolved, followed = list(parts), [], 0
+        while pending:
+            part = pending.pop(0)
+            if part in ("", "."):
+                continue
+            if part == "..":
+                if not resolved:
+                    errors.append(f"{link}: link escapes prefix")
+                    break
+                resolved.pop()
+                continue
+            resolved.append(part)
+            alias = "/".join(resolved)
+            if alias in targets:
+                followed += 1
+                if followed > 40:
+                    errors.append(f"{link}: cyclic or excessively nested link")
+                    break
+                pending = targets[alias] + pending
+                resolved = []
+        if any(name.startswith(link + "/") for name in entries | links.keys()):
+            errors.append(f"{link}: link overlaps extracted directory")
+
+
 def validate_bootstrap(path):
-    errors, seen, symlinks = [], set(), []
+    errors, seen, symlinks = [], set(), {}
     with zipfile.ZipFile(path) as archive:
         for entry in archive.infolist():
             name = safe_name(entry.filename)
@@ -67,18 +118,14 @@ def validate_bootstrap(path):
                         continue
                     target, link = line.split("←", 1)
                     link = safe_name(link)
-                    symlinks.append(link)
-                    if target.startswith("/"):
-                        if not target.startswith("/" + PREFIX + "/"):
-                            errors.append(f"{link}: absolute symlink outside NeverSoft prefix")
-                    elif posixpath.normpath(posixpath.join(posixpath.dirname(link), target)).startswith("../"):
-                        errors.append(f"{link}: symlink escapes prefix")
+                    if link in symlinks:
+                        errors.append(f"{link}: colliding symlink")
+                    symlinks[link] = (target, False)
         errors.extend(f"{name}: required bootstrap member missing" for name in sorted(REQUIRED - seen))
         for link in symlinks:
-            if link in seen or symlinks.count(link) > 1:
+            if link in seen:
                 errors.append(f"{link}: colliding symlink")
-            if any(name.startswith(link + "/") for name in seen):
-                errors.append(f"{link}: symlink overlaps extracted directory")
+        validate_links(seen, symlinks, errors)
         for executable in ("bin/bash", "bin/apt", "bin/dpkg"):
             if executable in seen:
                 with archive.open(executable) as stream:
@@ -93,29 +140,30 @@ def validate_deb(path):
     if arch not in ("aarch64", "all"):
         errors.append(f"unsupported package architecture: {arch}")
     for option in ("--ctrl-tarfile", "--fsys-tarfile"):
+        seen, links = set(), {}
         with subprocess.Popen(["dpkg-deb", option, str(path)], stdout=subprocess.PIPE) as process:
             with tarfile.open(fileobj=process.stdout, mode="r|") as archive:
                 for member in archive:
                     name = safe_name(member.name)
                     inspect_bytes(name, (name + "\n" + member.linkname).encode(), errors)
                     if option == "--fsys-tarfile" and not member.isdir():
-                        if name != PREFIX and not name.startswith(PREFIX + "/"):
+                        if not name.startswith(PREFIX + "/"):
                             errors.append(f"{name}: payload outside NeverSoft prefix")
+                    relative = name[len(PREFIX) + 1:] if name.startswith(PREFIX + "/") else None
+                    if option == "--fsys-tarfile" and relative is not None:
+                        if relative in seen:
+                            errors.append(f"{name}: duplicate archive entry")
+                        seen.add(relative)
                     if member.issym() or member.islnk():
-                        target = member.linkname
-                        resolved = posixpath.normpath(posixpath.join(posixpath.dirname(name), target))
-                        if target.startswith("/"):
-                            resolved = target[1:]
-                        elif member.islnk():
-                            resolved = posixpath.normpath(target)
-                        if option == "--fsys-tarfile" and not resolved.startswith(PREFIX + "/"):
-                            errors.append(f"{name}: link escapes prefix")
+                        if option == "--fsys-tarfile" and relative is not None:
+                            links[relative] = (member.linkname, member.islnk())
                     elif member.isfile():
                         inspect_stream(name, archive.extractfile(member), errors)
                     elif not member.isdir():
                         errors.append(f"{name}: unsupported archive member type")
             if process.wait() != 0:
                 errors.append(f"dpkg-deb failed: {option}")
+        validate_links(seen, links, errors)
     return sorted(set(errors))
 
 

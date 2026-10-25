@@ -56,3 +56,24 @@ authorized device connection or a user-operated test session.
 The source archive includes a Git bundle with this checkpoint's commits relative
 to the original baseline. The bundle preserves the branch history for later
 integration; no credential or signing key is included.
+
+## Independent review follow-up — 2026-10-25
+
+- All 52 source files in the uploaded archive match bundled commit
+  `a6da771d7d2a6ec06c71ecdb839e8a329aff957f`; its original baseline still matches
+  the remote `main` at the start of this review.
+- Fixed candidate/legacy bootstrap output overlap. The native build now writes
+  to `artifacts/native-bootstrap/`, which the legacy APK staging script ignores.
+- Fixed archive link containment checks for traversal and composed symlinks;
+  added regression cases rather than accepting lexical prefix checks alone.
+- Re-ran the pinned package preparation, legacy bootstrap generation, Android
+  source preparation and source validation successfully. The legacy archive
+  again failed the independent-prefix gate with 611 findings, as expected.
+- All 27 host tests pass, including the new containment and artifact-routing
+  regressions, under the restrictive review-host umask. All shell scripts pass
+  syntax checks and the full change passes `git diff --check`.
+- The routing tests use a simulated cross-build and validator to check artifact
+  selection only. They do not establish native compilation or Android behavior.
+- This review does not accept Milestone 1: native cross-compilation, full APK
+  assembly, device installation/execution and package transactions remain
+  unverified here. Signing and repository migration remain open work.

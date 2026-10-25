@@ -35,7 +35,7 @@ jobs:
         with:
           name: native-prefix-${{ github.sha }}
           path: |
-            artifacts/bootstrap/**
+            artifacts/native-bootstrap/**
             artifacts/reports/**
             artifacts/publish/**
           if-no-files-found: warn

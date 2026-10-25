@@ -60,6 +60,32 @@ class DistributionTests(unittest.TestCase):
     def test_reject_symlink_collision(self):
         self.assertTrue(distribution.validate_bootstrap(self.archive({"SYMLINKS.txt": b"apt\xe2\x86\x90bin/bash\n"})))
 
+    def test_reject_link_to_parent_directory(self):
+        self.assertTrue(distribution.validate_bootstrap(self.archive({"SYMLINKS.txt": "..←outside\n".encode()})))
+
+    def test_reject_absolute_link_traversal(self):
+        links = f"/{distribution.PREFIX}/../../outside←bin/escape\n"
+        self.assertTrue(distribution.validate_bootstrap(self.archive({"SYMLINKS.txt": links.encode()})))
+
+    def test_resolve_alias_before_parent_components(self):
+        links = "../lib←bin/alias\nalias/../../outside←bin/escape\n"
+        errors = distribution.validate_bootstrap(self.archive({"SYMLINKS.txt": links.encode()}))
+        self.assertTrue(any("escapes prefix" in error for error in errors))
+
+    def test_reject_link_beneath_link(self):
+        links = "../lib←bin/alias\nprogram←bin/alias/command\n"
+        errors = distribution.validate_bootstrap(self.archive({"SYMLINKS.txt": links.encode()}))
+        self.assertTrue(any("overlaps extracted directory" in error for error in errors))
+
+    def test_accept_internal_link_chain(self):
+        links = "../lib←bin/alias\nalias/program←bin/runner\n"
+        self.assertEqual([], distribution.validate_bootstrap(self.archive({
+            "SYMLINKS.txt": links.encode(), "lib/program": b"safe target"})))
+
+    def test_reject_link_cycle(self):
+        links = "second←bin/first\nfirst←bin/second\n"
+        self.assertTrue(distribution.validate_bootstrap(self.archive({"SYMLINKS.txt": links.encode()})))
+
     def test_scans_across_chunk_boundary(self):
         errors = []
         distribution.inspect_stream("test", io.BytesIO(b"x" * 65530 + b"/data/data/com.termux/files/usr"), errors)
@@ -77,12 +103,13 @@ class DistributionTests(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("dpkg-deb"), "dpkg-deb required")
 class PackageTests(unittest.TestCase):
-    def package(self, payload=None, control_script=None, arch="aarch64"):
+    def package(self, payload=None, control_script=None, arch="aarch64", links=None, hardlink=False):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         root = Path(temp.name) / "pkg"
         control = root / "DEBIAN"
         control.mkdir(parents=True)
+        control.chmod(0o755)  # dpkg requires this even under a restrictive host umask.
         (control / "control").write_text(
             f"Package: neversoft-test\nVersion: 1.0\nArchitecture: {arch}\n"
             "Maintainer: Test <test@example.invalid>\nDescription: Archive test fixture\n")
@@ -90,6 +117,12 @@ class PackageTests(unittest.TestCase):
         binary.parent.mkdir(parents=True)
         binary.write_bytes(payload or b"#!/data/data/com.neversoft.shell/files/usr/bin/bash\nexit 0\n")
         binary.chmod(0o755)
+        for name, target in (links or {}).items():
+            link = root / distribution.PREFIX / name
+            link.parent.mkdir(parents=True, exist_ok=True)
+            link.symlink_to(target)
+        if hardlink:
+            os.link(binary, binary.with_name("hardlink-command"))
         if control_script:
             (control / "postinst").write_bytes(control_script)
             (control / "postinst").chmod(0o755)
@@ -109,6 +142,20 @@ class PackageTests(unittest.TestCase):
 
     def test_wrong_package_arch_fails(self):
         self.assertTrue(distribution.validate_deb(self.package(arch="amd64")))
+
+    def test_reject_absolute_package_link_traversal(self):
+        self.assertTrue(distribution.validate_deb(self.package(links={
+            "bin/escape": f"/{distribution.PREFIX}/../../outside"})))
+
+    def test_reject_package_escape_through_alias(self):
+        errors = distribution.validate_deb(self.package(links={
+            "bin/alias": "../lib", "bin/escape": "alias/../../outside"}))
+        self.assertTrue(any("escapes prefix" in error for error in errors))
+
+    def test_accept_internal_package_links(self):
+        self.assertEqual([], distribution.validate_deb(self.package(links={
+            "bin/alias": f"/{distribution.PREFIX}/bin/test-command",
+            "bin/second": "alias"}, hardlink=True)))
 
     def test_release_paths_and_hashes(self):
         # Execute the real repository generator in an isolated miniature checkout.

@@ -4,7 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="${NEVERSOFT_WORK_DIR:-$ROOT_DIR/work}"
 PKG_DIR="$WORK_DIR/termux-packages"
-ARTIFACT_DIR="$ROOT_DIR/artifacts/bootstrap"
+# Candidate archives must never be picked up by the legacy app staging script.
+ARTIFACT_DIR="$ROOT_DIR/artifacts/native-bootstrap"
 ARCH="${1:-aarch64}"
 [[ "$ARCH" == aarch64 ]] || { echo "Only aarch64 is supported by this gate" >&2; exit 2; }
 command -v docker >/dev/null || { echo "Native bootstrap requires Docker on a Linux build host" >&2; exit 1; }

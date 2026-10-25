@@ -40,6 +40,8 @@ A target-SDK migration requires a tested executable-loading architecture.
    regression work and explicitly named as such.
 2. **Native-prefix candidate:** source-built via `build-native-bootstrap.sh`,
    pinned package inputs, no stock-archive fallback, archive and package gates.
+   Outputs remain in `artifacts/native-bootstrap/`, separate from the legacy
+   `artifacts/bootstrap/` input consumed by APK staging.
 3. **Device acceptance:** clean-install execution, package transaction and
    restoration evidence. A ZIP scan cannot satisfy this step.
 4. **Release:** approved signing identity, signed package repository and passed
