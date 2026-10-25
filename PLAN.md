@@ -36,7 +36,8 @@ No milestone is accepted yet. Never infer runtime acceptance from this ledger.
 
 - ADB returned an empty device list on 2026-10-24. No S24 acceptance was performed.
 - Local Docker is absent. The native-prefix GitHub job uses an isolated Linux
-  runner and preserves logs/artifacts without publishing a release.
+  runner and preserves logs/artifacts without publishing a release, but it has
+  not run: authenticated Git push returned 403 and branch creation returned 404.
 - APK signing-key continuity is not established. Never recommend uninstalling
   an existing installation to work around a signature mismatch; protect its data.
 - Production package signing remains unresolved; the old package-tree adapter
