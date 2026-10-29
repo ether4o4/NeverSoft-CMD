@@ -1,15 +1,15 @@
 name: Build NeverSoft Native APK
-# Pull requests validate artifacts; main publishes the rolling installable release.
+# Builds are unverified test artifacts. This workflow cannot overwrite releases.
 
 on:
   push:
-    branches: [main]
+    branches: [main, development/next-generation-foundation]
   pull_request:
     branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -39,7 +39,7 @@ jobs:
           docker --version
           docker info
 
-      - name: Build custom bootstrap and APK
+      - name: Build legacy compatibility baseline APK
         run: ./scripts/phase1-native-base.sh
 
       - name: Stage release APK with stable name
@@ -60,7 +60,7 @@ jobs:
       - name: Upload NeverSoft APK
         uses: actions/upload-artifact@v4
         with:
-          name: NeverSoft-native-arm64
+          name: NeverSoft-compatibility-arm64-${{ github.sha }}
           path: artifacts/apk/*.apk
           if-no-files-found: error
 
@@ -73,41 +73,3 @@ jobs:
             artifacts/bootstrap/**
             artifacts/reports/**
           if-no-files-found: warn
-
-      - name: Move rolling tag to this commit
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/android-latest" >/dev/null 2>&1; then
-            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/android-latest" \
-              -f sha="${GITHUB_SHA}" -F force=true >/dev/null
-          else
-            gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" \
-              -f ref=refs/tags/android-latest -f sha="${GITHUB_SHA}" >/dev/null
-          fi
-          echo "android-latest -> ${GITHUB_SHA}"
-
-      - name: Publish rolling release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: android-latest
-          name: NeverSoft CMD (latest build)
-          body: |
-            Rolling ARM64 debug build of NeverSoft CMD.
-
-            - Commit: `${{ github.sha }}`
-            - Built: `${{ github.run_id }}` / run #${{ github.run_number }}
-            - App ID: `com.neversoft.shell`
-            - ABI: `arm64-v8a`
-
-            Download: `neversoft-cmd.apk` (debug-signed; enable install from unknown sources).
-          target_commitish: ${{ github.sha }}
-          draft: false
-          prerelease: false
-          make_latest: true
-          files: |
-            release/neversoft-cmd.apk
-            release/neversoft-cmd.apk.sha256

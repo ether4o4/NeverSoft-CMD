@@ -1,0 +1,9 @@
+[
+  {
+    "file": "toybox_0.8.9+dfsg-neversoft1_aarch64.deb",
+    "sha256": "c8fa08f3380d309e968db22c2fb7d0dc954aa240c0470f4a5ae18e055e8094fd",
+    "passed": true,
+    "errors": [],
+    "runtime_verified": false
+  }
+]

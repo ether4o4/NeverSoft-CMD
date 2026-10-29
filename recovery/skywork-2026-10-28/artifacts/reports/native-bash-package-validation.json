@@ -1,0 +1,9 @@
+[
+  {
+    "file": "bash_5.2.37-neversoft1_aarch64.deb",
+    "sha256": "7433e774c4583cb54f24c96bcefbe51357eba94679c5f5a54321675bb80e6cce",
+    "passed": true,
+    "errors": [],
+    "runtime_verified": false
+  }
+]

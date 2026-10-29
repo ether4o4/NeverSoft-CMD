@@ -1,0 +1,12 @@
+{
+  "bootstrap": "bootstrap-aarch64.zip",
+  "sha256": "570d89cb66752059eaa3b68f1585e9f9a9d389fe5df8e44722bca6234a9f8c1d",
+  "version": "0.1.0-native",
+  "arch": "aarch64",
+  "prefix": "/data/data/com.neversoft.shell/files/usr",
+  "bash_package_sha256": "7433e774c4583cb54f24c96bcefbe51357eba94679c5f5a54321675bb80e6cce",
+  "toybox_package_sha256": "c8fa08f3380d309e968db22c2fb7d0dc954aa240c0470f4a5ae18e055e8094fd",
+  "applet_count": "226",
+  "built_from_stock_termux_bootstrap": false,
+  "on_device_bionic_execution_verified": false
+}

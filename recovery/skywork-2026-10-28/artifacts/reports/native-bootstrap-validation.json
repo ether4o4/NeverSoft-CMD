@@ -1,0 +1,9 @@
+[
+  {
+    "file": "bootstrap-aarch64.zip",
+    "sha256": "570d89cb66752059eaa3b68f1585e9f9a9d389fe5df8e44722bca6234a9f8c1d",
+    "passed": true,
+    "errors": [],
+    "runtime_verified": false
+  }
+]

@@ -104,9 +104,10 @@ EOF
   (cd "$tmp" && zip -qr9 "$archive.new" .)
   mv -f "$archive.new" "$archive"
 
-  unzip -Z1 "$archive" | grep -Fxq 'bin/bash' || { echo "ERROR: bootstrap missing bin/bash" >&2; exit 1; }
-  unzip -Z1 "$archive" | grep -Fxq 'bin/apt' || { echo "ERROR: bootstrap missing apt" >&2; exit 1; }
-  unzip -Z1 "$archive" | grep -Fxq 'bin/ghget' || { echo "ERROR: ghget injection failed" >&2; exit 1; }
+  # Consume the whole listing: grep -q can SIGPIPE unzip under pipefail.
+  unzip -Z1 "$archive" | grep -Fx 'bin/bash' >/dev/null || { echo "ERROR: bootstrap missing bin/bash" >&2; exit 1; }
+  unzip -Z1 "$archive" | grep -Fx 'bin/apt' >/dev/null || { echo "ERROR: bootstrap missing apt" >&2; exit 1; }
+  unzip -Z1 "$archive" | grep -Fx 'bin/ghget' >/dev/null || { echo "ERROR: ghget injection failed" >&2; exit 1; }
 }
 
 IFS=',' read -ra arches <<< "$ARCHITECTURES"

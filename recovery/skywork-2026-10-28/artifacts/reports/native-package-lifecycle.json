@@ -1,0 +1,20 @@
+{
+  "arch": "aarch64",
+  "prefix": "/data/data/com.neversoft.shell/files/usr",
+  "ndk": "/data/workspace/skywork/common_workspace/.android-toolchain/android-sdk/ndk/22.1.7171670",
+  "api_level": 28,
+  "package": "neversoft-probe_1.0_aarch64.deb",
+  "package_sha256": "62250977935aa72fd5db319805520d9eb7801a568d02f5fd3c7d65fc50eee46c",
+  "checks": {
+    "cross_compiled_aarch64": true,
+    "embeds_neversoft_prefix": true,
+    "embeds_stock_termux_prefix": false,
+    "dpkg_install_registered": true,
+    "dpkg_remove_deregistered": true,
+    "apt_update_indexed": true,
+    "apt_install_into_prefix": true,
+    "apt_remove_from_prefix": true
+  },
+  "on_device_bionic_execution_verified": false,
+  "note": "Host cross-build + real dpkg/apt transactions against the NeverSoft prefix. On-device bionic execution is a separate device-acceptance gate."
+}

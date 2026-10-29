@@ -21,6 +21,12 @@ command -v dpkg-scanpackages >/dev/null 2>&1 || {
 
 [[ -d "$OUTPUT_DIR" ]] || { echo "ERROR: package output directory not found: $OUTPUT_DIR" >&2; exit 1; }
 
+# Never publish foreign-prefix payloads, control scripts, or empty output.
+mapfile -d '' packages < <(find "$OUTPUT_DIR" -maxdepth 1 -type f -name '*.deb' -print0)
+(( ${#packages[@]} > 0 )) || { echo "ERROR: no packages to publish" >&2; exit 1; }
+python3 "$ROOT_DIR/scripts/validate-distribution.py" deb "${packages[@]}" \
+  --report "$ROOT_DIR/artifacts/reports/repository-prefix-validation.json"
+
 rm -rf "$REPO_ROOT"
 mkdir -p "$POOL_DIR" "$DIST_DIR"
 
@@ -60,8 +66,8 @@ Components: $NEVERSOFT_APT_COMPONENT
 Description: Native NeverSoft Android package repository
 Date: $(LC_ALL=C date -Ru)
 SHA256:
- $(sha256sum "$packages_rel" | awk '{print $1}') $(stat -c%s "$packages_rel") $packages_rel
- $(sha256sum "$packages_gz_rel" | awk '{print $1}') $(stat -c%s "$packages_gz_rel") $packages_gz_rel
+ $(sha256sum "$packages_rel" | awk '{print $1}') $(stat -c%s "$packages_rel") $NEVERSOFT_APT_COMPONENT/binary-$ARCH/Packages
+ $(sha256sum "$packages_gz_rel" | awk '{print $1}') $(stat -c%s "$packages_gz_rel") $NEVERSOFT_APT_COMPONENT/binary-$ARCH/Packages.gz
 EOF
 popd >/dev/null
 
