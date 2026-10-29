@@ -1,0 +1,10 @@
+Recovery host checks
+
+python3 -m unittest discover -s tests -v
+Ran 17 tests in 0.258s
+OK
+
+bash -n: 19 shell scripts checked, 0 failures
+Credential-pattern scan: 0 matches
+
+No Android build, installation, or device execution was performed during recovery.

@@ -1,0 +1,13 @@
+{
+  "component": "bash",
+  "source_version": "5.2.37",
+  "package": "bash_5.2.37-neversoft1_aarch64.deb",
+  "package_sha256": "7433e774c4583cb54f24c96bcefbe51357eba94679c5f5a54321675bb80e6cce",
+  "binary_sha256": "2e949911a750d7e0435a5fd21547293012c103f5ffd1fe98a3efb5d427e19108",
+  "arch": "aarch64",
+  "prefix": "/data/data/com.neversoft.shell/files/usr",
+  "needed_libraries": "libc.so libdl.so ",
+  "embeds_neversoft_prefix": true,
+  "embeds_stock_termux_prefix": false,
+  "on_device_bionic_execution_verified": false
+}

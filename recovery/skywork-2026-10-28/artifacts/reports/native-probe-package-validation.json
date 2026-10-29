@@ -1,0 +1,9 @@
+[
+  {
+    "file": "neversoft-probe_1.0_aarch64.deb",
+    "sha256": "62250977935aa72fd5db319805520d9eb7801a568d02f5fd3c7d65fc50eee46c",
+    "passed": true,
+    "errors": [],
+    "runtime_verified": false
+  }
+]

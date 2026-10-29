@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Windows 11-inspired NeverSoft shell theme: restrained dark surfaces,
+      cool blue accent, clean sans UI chrome. Terminal rendering keeps its own
+      monospace typeface and high-contrast black surface.
+    -->
+    <style name="Theme.NeverSoft" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">#202020</item>
+        <item name="android:colorAccent">#60CDFF</item>
+        <item name="android:statusBarColor">#202020</item>
+        <item name="android:navigationBarColor">#202020</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>
